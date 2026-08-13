@@ -20,7 +20,9 @@ const CHARTER_GROUPS = [
   { id: "CHARTER_CAPACITY_1980_1600", locations: ["Capacity NJ1980", "Capacity NJ1600"] }
 ];
 
-const COL = { ADDRESS: 2, CARRIER: 3, TRUCK: 4, STATE: 5, PRICE: 6 };
+const COL = { ADDRESS: 2, CARRIER: 3, TRUCK: 4, STATE: 5, PRICE: 6, PALLETS: 8, TIKTOK_LABEL: 9, TIKTOK_PRICE: 10, TIKTOK_TRUCK: 11 };
+
+const TIKTOK_MERCHANTS = ["NJ TT1001", "NJ TT245", "NJ TT511", "Swift X NJ650"];
 
 function getSpreadsheetTz() {
   return SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone() || Session.getScriptTimeZone();
@@ -283,5 +285,62 @@ function fillPickupData() {
   }
 
   applyCharterPricing(data, charterMeta);
+  applyTikTokSummary(data);
   range.setValues(data);
+  sheet.getRange(startRow, 10, 1, 3).setWrapStrategy(SpreadsheetApp.WrapStrategy.OVERFLOW);
+}
+
+function isTikTokMerchant(name) {
+  return TIKTOK_MERCHANTS.some(m => matchLocation(name, m) || matchLocation(m, name));
+}
+
+function defaultTruckType(value) {
+  const raw = String(value || "").replace(/[\u2018\u2019\u2032]/g, "'").trim();
+  if (!raw) return "26'";
+  const n = raw.replace(/'/g, "");
+  if (n === "26" || n === "53") return n + "'";
+  return raw.endsWith("'") ? raw : raw + "'";
+}
+
+function formatPriceTag(value) {
+  const n = Number(String(value || "").replace(/[$,]/g, ""));
+  if (!isFinite(n)) return "";
+  return "$" + (Number.isInteger(n) ? n : n);
+}
+
+function palletNumber(value) {
+  const n = Number(String(value || "").replace(/[$,]/g, "").trim());
+  return isFinite(n) ? n : 0;
+}
+
+function applyTikTokSummary(data) {
+  data[0][COL.TIKTOK_LABEL] = "";
+  data[0][COL.TIKTOK_PRICE] = "";
+  data[0][COL.TIKTOK_TRUCK] = "";
+
+  const priceOrder = [];
+  const priceCount = {};
+  const truckParts = [];
+
+  data.forEach(row => {
+    if (!isTikTokMerchant(row[1])) return;
+
+    const truck = defaultTruckType(row[COL.TRUCK]);
+    truckParts.push(truck + "-" + palletNumber(row[COL.PALLETS]) + "plts");
+
+    const tag = formatPriceTag(row[COL.PRICE]);
+    if (!tag) return;
+    if (!priceCount[tag]) {
+      priceCount[tag] = 0;
+      priceOrder.push(tag);
+    }
+    priceCount[tag] += 1;
+  });
+
+  if (!truckParts.length) return false;
+
+  data[0][COL.TIKTOK_LABEL] = "TikTok Inc.";
+  data[0][COL.TIKTOK_PRICE] = priceOrder.map(tag => tag + "-" + priceCount[tag]).join("/");
+  data[0][COL.TIKTOK_TRUCK] = truckParts.join("+");
+  return true;
 }
