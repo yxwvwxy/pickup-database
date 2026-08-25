@@ -23,6 +23,7 @@ const CHARTER_GROUPS = [
 const COL = { ADDRESS: 2, CARRIER: 3, TRUCK: 4, STATE: 5, PRICE: 6, PALLETS: 8, TIKTOK_LABEL: 9, TIKTOK_PRICE: 10, TIKTOK_TRUCK: 11 };
 
 const TIKTOK_MERCHANTS = ["NJ TT1001", "NJ TT245", "NJ TT511", "Swift X NJ650"];
+const TIKTOK_PRICE_ORDER = [200, 100, 360, 180];
 
 function getSpreadsheetTz() {
   return SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone() || Session.getScriptTimeZone();
@@ -318,8 +319,8 @@ function applyTikTokSummary(data) {
   data[0][COL.TIKTOK_PRICE] = "";
   data[0][COL.TIKTOK_TRUCK] = "";
 
-  const priceOrder = [];
   const priceCount = {};
+  const extraOrder = [];
   const truckParts = [];
 
   data.forEach(row => {
@@ -332,15 +333,21 @@ function applyTikTokSummary(data) {
     if (!tag) return;
     if (!priceCount[tag]) {
       priceCount[tag] = 0;
-      priceOrder.push(tag);
+      const amount = Number(String(tag).replace(/[$,]/g, ""));
+      if (TIKTOK_PRICE_ORDER.indexOf(amount) === -1) extraOrder.push(tag);
     }
     priceCount[tag] += 1;
   });
 
   if (!truckParts.length) return false;
 
+  const orderedTags = TIKTOK_PRICE_ORDER
+    .map(n => "$" + n)
+    .filter(tag => priceCount[tag])
+    .concat(extraOrder);
+
   data[0][COL.TIKTOK_LABEL] = "TikTok Inc.";
-  data[0][COL.TIKTOK_PRICE] = priceOrder.map(tag => tag + "-" + priceCount[tag]).join("/");
+  data[0][COL.TIKTOK_PRICE] = orderedTags.map(tag => tag + "-" + priceCount[tag]).join("/");
   data[0][COL.TIKTOK_TRUCK] = truckParts.join("+");
   return true;
 }
