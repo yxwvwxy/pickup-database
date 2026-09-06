@@ -6,7 +6,7 @@ function onOpen(e) {
     .addItem("Confirm", "confirmToday")
     .addItem("Run manual", "runManualToday")
     .addToUi();
-  restoreEmptyPastePlaceholders_();
+  rolloverDailyListIfNewDay_();
 }
 
 function onEdit(e) {
@@ -729,6 +729,11 @@ function todayLocalDate_() {
   return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
 }
 
+function yesterdayLocalDate_() {
+  const today = todayLocalDate_();
+  return new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+}
+
 function writeDailyListDate_(sheet, date) {
   const cell = sheet.getRange("A1");
   cell.setValue(date);
@@ -782,6 +787,25 @@ function showPastePlaceholders_(sheet) {
   for (let c = 1; c <= 4; c++) {
     setPastePlaceholderCell_(sheet.getRange(DAILY_PASTE_START_ROW, c), c);
   }
+}
+
+function sameSheetDate_(a, b) {
+  const left = parseSheetDate(a);
+  const right = parseSheetDate(b);
+  return !!(left && right && left.getTime() === right.getTime());
+}
+
+function rolloverDailyListIfNewDay_() {
+  const sheet = findDailyListSheet_(SpreadsheetApp.getActiveSpreadsheet());
+  if (!sheet) return;
+  const listDate = yesterdayLocalDate_();
+  if (sameSheetDate_(dailyListDate_(sheet), listDate)) {
+    restoreEmptyPastePlaceholders_();
+    return;
+  }
+  writeDailyListDate_(sheet, listDate);
+  sheet.getRange(DAILY_PASTE_START_ROW, 1, 1, 4).clearContent();
+  showPastePlaceholders_(sheet);
 }
 
 function restoreEmptyPastePlaceholders_() {
