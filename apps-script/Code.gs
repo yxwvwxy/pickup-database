@@ -1403,14 +1403,14 @@ function parseJobLine_(line) {
   if (!s) return null;
   const cancelled = /❌/.test(s);
   const transfer100 = /转\s*100/.test(s);
-  s = s.replace(/[✅❌🚗🌟]/g, "")
+  s = s.replace(/[✅❌🚗❗🌟]/g, "")
     .replace(/转\s*100/g, "")
-    .replace(/没货/g, "")
     .trim();
-  const m = s.match(/^(\d+(?:\s*[+＋]\s*\d+)*)\s*[.\u3001、:：]\s*(.+)$/);
+  const m = s.match(/(\d+(?:\s*[+＋]\s*\d+)*)\s*[.\u3001、:：]\s*(.+)$/);
   if (!m) return null;
   const nums = m[1].split(/[+＋]/).map(x => x.replace(/\s+/g, "")).filter(Boolean);
-  return { cancelled, transfer100, nums, route: m[2].trim() };
+  const route = String(m[2] || "").replace(/^(关门|没货|无货|放空)+/g, "").trim();
+  return { cancelled, transfer100, nums, route: route };
 }
 
 function classifySection_(header, carrierKey) {
