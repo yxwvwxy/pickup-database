@@ -29,9 +29,7 @@ function mapCarrierName(value) {
 
 const CHARTER_GROUPS = [
   { id: "CHARTER_FM", locations: ["SF NJ122", "SF-FM", "SF FM", "JD NJ1570", "Yanwen-FM"] },
-  { id: "CHARTER_SHIPCUBE", locations: ["ShipCube PA11200", "ShipCube PA700"] },
-  { id: "CHARTER_CAPACITY_1101_1112_1000", locations: ["Capacity NJ1101", "Capacity NJ1112", "Capacity NJ1000"] },
-  { id: "CHARTER_CAPACITY_1980_1600", locations: ["Capacity NJ1980", "Capacity NJ1600"] }
+  { id: "CHARTER_SHIPCUBE", locations: ["ShipCube PA11200", "ShipCube PA700"] }
 ];
 
 const COL = { ADDRESS: 2, CARRIER: 3, TRUCK: 4, STATE: 5, PRICE: 6, ARRIVAL: 7, PALLETS: 8, TIKTOK_LABEL: 9, TIKTOK_PRICE: 10, TIKTOK_TRUCK: 11 };
@@ -129,6 +127,10 @@ function getCharterGroupByLocation(name) {
   return "";
 }
 
+function isCapacityLocation_(name) {
+  return compact(name).indexOf("capacity") !== -1;
+}
+
 function loadDatabase(dbSheet) {
   const lastRow = dbSheet.getLastRow();
   const lastCol = Math.max(dbSheet.getLastColumn(), 11);
@@ -186,7 +188,12 @@ function fillMissingFromOlder(match, location, db, dateValue) {
 }
 
 function enrichCharterDbRows(db) {
-  CHARTER_GROUPS.forEach(group => {
+  const groups = CHARTER_GROUPS.slice();
+  const capacityRows = db.filter(r => isCapacityLocation_(r[1]));
+  if (capacityRows.length) {
+    groups.push({ id: "CAPACITY_DB", locations: capacityRows.map(r => String(r[1] || "").trim()).filter(Boolean) });
+  }
+  groups.forEach(group => {
     const rows = db.filter(r => group.locations.some(loc => matchLocation(r[1], loc)));
     if (!rows.length) return;
 
@@ -409,6 +416,8 @@ function fillConfirmCfg_(sheet, startRow, endRow, dateValue, options) {
   const db = loadDatabase(SpreadsheetApp.getActiveSpreadsheet().getSheetByName("database"));
   enrichCharterDbRows(db);
   const rules = loadRules_();
+  const sdCapJobs = loadSdCapacityJobKeys_(SpreadsheetApp.getActiveSpreadsheet());
+  let sdCapIdx = 0;
 
   for (let i = 0; i < data.length; i++) {
     const location = String(data[i][1] || "").trim();
@@ -430,7 +439,8 @@ function fillConfirmCfg_(sheet, startRow, endRow, dateValue, options) {
       pool.filter(r => sheetDateTime_(r[10]) === maxDate),
       ewrCarrier
     );
-    const isCharterLoc = latest.some(r => getCharterGroupByLocation(r[1]));
+    const isSdCapacity = isCapacityLocation_(location) && resultCarrierKey_(ewrCarrier) === "sd";
+    const isCharterLoc = latest.some(r => getCharterGroupByLocation(r[1])) || isSdCapacity;
 
     let match = null;
     let hasSchedule = false;
@@ -458,7 +468,9 @@ function fillConfirmCfg_(sheet, startRow, endRow, dateValue, options) {
 
     match = fillMissingFromOlder(match, location, db, dateValue);
 
-    const charterGroup = getCharterGroupByLocation(match[1]);
+    const charterGroup = isSdCapacity
+      ? (sdCapJobs.length ? (sdCapJobs[sdCapIdx++] || ("SDCAP|" + i)) : "")
+      : getCharterGroupByLocation(match[1]);
     const isCharter = !!charterGroup;
     const basePrice = Number(String(match[6]).replace(/[$,]/g, ""));
 
@@ -959,7 +971,8 @@ function fillToday() {
       carrier: r.carrier,
       official: official,
       truck: r.truck,
-      dest: r.dest
+      dest: r.dest,
+      job: r.job
     };
   }).filter(r => r.official);
   const fillRows = buildFillRows_(resolved, loadTransportationLocations_(ss));
@@ -1096,7 +1109,8 @@ function loadLocalResultRows_(ss) {
       raw: String(r[2] || "").trim(),
       official: String(r[3] || "").trim(),
       truck: String(r[4] || "").trim(),
-      dest: String(r[5] || "").trim()
+      dest: String(r[5] || "").trim(),
+      job: String(r[6] || "").trim()
     }))
     .filter(r => r.kind === "本地");
 }
@@ -1115,6 +1129,16 @@ function resultCarrierKey_(name) {
   if (n === "fm") return "fm";
   if (n === "nyqz") return "nyqz";
   return "";
+}
+
+function loadSdCapacityJobKeys_(ss) {
+  const keys = [];
+  loadLocalResultRows_(ss).forEach(r => {
+    if (resultCarrierKey_(r.carrier) !== "sd") return;
+    if (!isCapacityLocation_(r.official || r.raw)) return;
+    keys.push("SDCAP|" + (String(r.job || "").trim() || String(keys.length)));
+  });
+  return keys;
 }
 
 function groupSameOfficial_(rows) {
@@ -1148,8 +1172,9 @@ function buildFillRows_(localRows, transportNames) {
       carrier: carrier || ""
     });
   }
-  function take(rows, needTime) {
-    groupSameOfficial_(rows).forEach(r => {
+  function take(rows, needTime, keepOrder) {
+    const list = keepOrder ? (rows || []) : groupSameOfficial_(rows);
+    list.forEach(r => {
       placed.push(r);
       add(r.official, r.truck, needTime, r.carrier);
     });
@@ -1157,7 +1182,7 @@ function buildFillRows_(localRows, transportNames) {
   take(localRows.filter(r => resultDest_(r) === "JFK"), false);
   take(localRows.filter(r => resultDest_(r) === "936"), false);
   ["han", "sd", "fm", "nyqz"].forEach(key => {
-    take(localRows.filter(r => resultDest_(r) === "600" && resultCarrierKey_(r.carrier) === key), true);
+    take(localRows.filter(r => resultDest_(r) === "600" && resultCarrierKey_(r.carrier) === key), true, key === "sd");
   });
   take(localRows.filter(r => resultDest_(r) === "600" && placed.indexOf(r) === -1), true);
   const seen = {};
@@ -1308,7 +1333,8 @@ function findOfficialLocation_(raw, dbNames, carrierKey) {
 }
 
 function pickCapacityOfficial_(raw, names) {
-  const c = compact(raw).replace(/^capacity/, "");
+  let c = compact(raw).replace(/^capacity/, "");
+  if (/^\d+$/.test(c)) c = "nj" + c;
   const keys = {
     nj1101: ["capacitynj1101"],
     nj1112: ["capacitynj1112"],
