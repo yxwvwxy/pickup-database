@@ -23,7 +23,9 @@ function compact(str) {
 
 function mapCarrierName(value) {
   const raw = String(value || "").trim();
-  if (normalize(raw) === "80s") return "Han Express";
+  const n = normalize(raw);
+  if (n === "80s") return "Han Express";
+  if (n === "nyqz") return "Inspire";
   return raw;
 }
 
@@ -39,6 +41,7 @@ const TIKTOK_PRICE_ORDER = [200, 100, 360, 180];
 
 const RULES = [
   { type: "carrier", value: "NYQZ", truckRule: "53'", useDbPrice: true },
+  { type: "carrier", value: "Inspire Logistics", truckRule: "53'", useDbPrice: true },
   { type: "carrier", value: "运力卡车", truckRule: "DB", useDbPrice: true },
   { type: "location", value: "Emsom CT500", truckRule: "53'", useDbPrice: true }
 ];
@@ -627,7 +630,7 @@ const ANALYSIS_DETAIL_START_ROW = 12;
 const ANALYSIS_DETAIL_COLS = 7;
 const DAILY_CARRIERS = [
   { key: "han", name: "Han Express", col: 1, color: "#D0E2FF" },
-  { key: "nyqz", name: "NYQZ", col: 2, color: "#FFF2CC" },
+  { key: "inspire", name: "Inspire", col: 2, color: "#FFF2CC" },
   { key: "fm", name: "FM", col: 3, color: "#D9EAD3" },
   { key: "sd", name: "SD", col: 4, color: "#FCE5CD" }
 ];
@@ -1127,7 +1130,7 @@ function resultCarrierKey_(name) {
   if (n === "han express" || n === "80s") return "han";
   if (n === "sd") return "sd";
   if (n === "fm") return "fm";
-  if (n === "nyqz") return "nyqz";
+  if (n === "inspire" || n === "nyqz") return "inspire";
   return "";
 }
 
@@ -1181,7 +1184,7 @@ function buildFillRows_(localRows, transportNames) {
   }
   take(localRows.filter(r => resultDest_(r) === "JFK"), false);
   take(localRows.filter(r => resultDest_(r) === "936"), false);
-  ["han", "sd", "fm", "nyqz"].forEach(key => {
+  ["han", "sd", "fm", "inspire"].forEach(key => {
     take(localRows.filter(r => resultDest_(r) === "600" && resultCarrierKey_(r.carrier) === key), true, key === "sd");
   });
   take(localRows.filter(r => resultDest_(r) === "600" && placed.indexOf(r) === -1), true);
