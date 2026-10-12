@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EWR Pickup — sheet-style mock</title>
+  <style>
+    :root {
+      --line: #e2e3e3;
+      --head: #f8f9fa;
+      --auto: #f3f3f3;
+      --text: #202124;
+      --muted: #5f6368;
+      --select: #1a73e8;
+      --han: #d0e2ff;
+      --inspire: #fff2cc;
+      --fm: #d9ead3;
+      --sd: #fce5cd;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      color: var(--text);
+      font: 13px/1.35 Arial, Helvetica, sans-serif;
+      background: #f8f9fa;
+    }
+    .app { display: flex; flex-direction: column; height: 100%; }
+    .menubar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      height: 40px;
+      padding: 0 12px;
+      background: #fff;
+      border-bottom: 1px solid #dadce0;
+    }
+    .brand { font-weight: 700; font-size: 14px; }
+    .date { color: var(--muted); }
+    .menu {
+      display: flex;
+      gap: 6px;
+      margin-left: 8px;
+    }
+    .menu button {
+      height: 26px;
+      padding: 0 10px;
+      border: 1px solid #dadce0;
+      background: #fff;
+      border-radius: 4px;
+      font: inherit;
+      cursor: default;
+    }
+    .menu button.primary { background: #e8f0fe; border-color: #d2e3fc; color: #174ea6; }
+    .hint { margin-left: auto; color: var(--muted); font-size: 12px; }
+    .sheet {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: #fff;
+    }
+    .grid-wrap { flex: 1; overflow: auto; min-height: 0; }
+    table.grid {
+      border-collapse: collapse;
+      min-width: 100%;
+    }
+    .grid th, .grid td {
+      border: 1px solid var(--line);
+      padding: 2px 6px;
+      height: 24px;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+    .grid thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: var(--head);
+      font-weight: 600;
+      text-align: center;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .grid .rowhead {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      width: 36px;
+      min-width: 36px;
+      background: var(--head);
+      text-align: center;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .grid thead .rowhead { z-index: 3; }
+    .grid td { background: #fff; }
+    .grid td.auto { background: var(--auto); color: #3c4043; }
+    .grid td.col-han, .grid th.col-han { background: var(--han); }
+    .grid td.col-inspire, .grid th.col-inspire { background: var(--inspire); }
+    .grid td.col-fm, .grid th.col-fm { background: var(--fm); }
+    .grid td.col-sd, .grid th.col-sd { background: var(--sd); }
+    .manual { background: #fff; box-shadow: inset 0 0 0 1px #fff; }
+    .manual:focus, .chip:focus {
+      outline: 2px solid var(--select);
+      outline-offset: -2px;
+    }
+    input.cell, select.cell {
+      width: 100%;
+      border: 0;
+      background: transparent;
+      font: inherit;
+      color: inherit;
+      padding: 0;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      max-width: 100%;
+      padding: 0 8px;
+      border: 0;
+      border-radius: 12px;
+      height: 18px;
+      font: inherit;
+      background: #e6f4ea;
+      color: #137333;
+      cursor: pointer;
+    }
+    .chip.han { background: var(--han); color: #174ea6; }
+    .chip.inspire { background: var(--inspire); color: #7a5c00; }
+    .chip.fm { background: var(--fm); color: #0d652d; }
+    .chip.sd { background: var(--sd); color: #8a4b08; }
+    .chip.tt { background: #f3e8fd; color: #7627bb; }
+    .price { text-align: right; }
+    .total td { font-weight: 700; }
+    .note { color: #b06000; }
+    .bold { font-weight: 700; }
+    .yellow { background: #fff2cc; }
+    .paste-table td {
+      height: auto;
+      vertical-align: top;
+      padding: 0;
+    }
+    .paste-head { font-weight: 700; }
+    textarea.paste {
+      width: 100%;
+      min-height: 420px;
+      border: 0;
+      resize: vertical;
+      padding: 8px;
+      font: 13px/1.45 Arial, Helvetica, sans-serif;
+      background: transparent;
+    }
+    textarea.paste::placeholder { color: #b7b7b7; font-style: italic; }
+    .col-han { background: var(--han); }
+    .col-inspire { background: var(--inspire); }
+    .col-fm { background: var(--fm); }
+    .col-sd { background: var(--sd); }
+    .tabs {
+      display: flex;
+      align-items: stretch;
+      height: 36px;
+      background: #f8f9fa;
+      border-top: 1px solid #dadce0;
+      padding: 0 8px;
+    }
+    .tab {
+      border: 0;
+      background: transparent;
+      padding: 0 16px;
+      font: inherit;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .tab.active {
+      background: #fff;
+      color: var(--text);
+      font-weight: 600;
+      box-shadow: inset 0 2px 0 #188038;
+    }
+    .view { display: none; height: 100%; }
+    .view.active { display: flex; flex-direction: column; }
+    .legend {
+      padding: 6px 12px;
+      color: var(--muted);
+      font-size: 12px;
+      border-bottom: 1px solid #eee;
+      background: #fff;
+    }
+    .swatch {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border: 1px solid #dadce0;
+      vertical-align: -1px;
+      margin-right: 4px;
+    }
+    .swatch.white { background: #fff; }
+    .swatch.gray { background: var(--auto); }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="menubar">
+      <div class="brand">EWR Pickup</div>
+      <div class="date">2026-10-10</div>
+      <div class="menu">
+        <button>Parse lists</button>
+        <button>Fill today</button>
+        <button class="primary">Confirm</button>
+        <button>Run manual</button>
+      </div>
+      <div class="hint">白底格子 = 现在 Sheet 里要人手填的；浅灰 = Confirm / 目录自动带出</div>
+    </div>
+
+    <div class="sheet">
+      <section id="ewr" class="view active">
+        <div class="legend">
+          <span class="swatch white"></span>B 地点、E 车型、H 到仓、I 板数 手填（和现在 EWR 表一样）
+          &nbsp;&nbsp;
+          <span class="swatch gray"></span>C 地址、D 承运商、F 州、G 价格 由 Confirm 写入
+        </div>
+        <div class="grid-wrap">
+          <table class="grid">
+            <thead>
+              <tr>
+                <th class="rowhead"></th>
+                <th>A 日期</th>
+                <th>B 提货地点</th>
+                <th>C 地址</th>
+                <th>D 承运商</th>
+                <th>E 车型</th>
+                <th>F 州</th>
+                <th>G 价格</th>
+                <th>H 到仓时间</th>
+                <th>I 板数</th>
+                <th>J</th>
+                <th>K</th>
+                <th>L</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="rowhead">2</td>
+                <td>2026-10-10</td>
+                <td><button class="chip">StockX</button></td>
+                <td class="auto">11 Ilene Ct, Hillsborough</td>
+                <td class="auto">Han Express</td>
+                <td><select class="cell"><option>26'</option><option>53'</option></select></td>
+                <td class="auto">NJ</td>
+                <td class="auto price">180</td>
+                <td class="auto"></td>
+                <td><input class="cell" value="2" /></td>
+                <td class="bold">TikTok Inc.</td>
+                <td>$200-1/$100-1</td>
+                <td>26'-4plts+26'-2plts</td>
+              </tr>
+              <tr>
+                <td class="rowhead">3</td>
+                <td></td>
+                <td><button class="chip">NJ TT1001</button></td>
+                <td class="auto">1 Distribution Way</td>
+                <td class="auto">Han Express</td>
+                <td><select class="cell"><option>26'</option><option>53'</option></select></td>
+                <td class="auto">NJ</td>
+                <td class="auto price">200</td>
+                <td><input class="cell" value="2026-10-10 12:00:00" /></td>
+                <td><input class="cell" value="4" /></td>
+                <td></td><td></td><td></td>
+              </tr>
+              <tr>
+                <td class="rowhead">4</td>
+                <td></td>
+                <td><button class="chip tt">NJ TT245</button></td>
+                <td class="auto">245 Randolph Rd</td>
+                <td class="auto">Han Express</td>
+                <td><select class="cell"><option>26'</option><option>53'</option></select></td>
+                <td class="auto">NJ</td>
+                <td class="auto price">100</td>
+                <td><input class="cell" value="2026-10-10 12:00:00" /></td>
+                <td><input class="cell" value="2" /></td>
+                <td></td><td></td><td></td>
+              </tr>
+              <tr>
+                <td class="rowhead">5</td>
+                <td></td>
+                <td><button class="chip sd">Capacity NJ1000</button></td>
+                <td class="auto">1000 Industrial Pkwy</td>
+                <td class="auto">SD</td>
+                <td><select class="cell"><option></option><option>26'</option><option>53'</option></select></td>
+                <td class="auto">NJ</td>
+                <td class="auto price">400</td>
+                <td><input class="cell" value="2026-10-10 12:00:00" /></td>
+                <td><input class="cell" /></td>
+                <td></td><td></td><td></td>
+              </tr>
+              <tr>
+                <td class="rowhead">6</td>
+                <td></td>
+                <td><button class="chip sd">Capacity NJ1112</button></td>
+                <td class="auto">1112 Commerce Blvd</td>
+                <td class="auto">SD</td>
+                <td><select class="cell"><option></option><option>26'</option><option>53'</option></select></td>
+                <td class="auto">NJ</td>
+                <td class="auto price"></td>
+                <td><input class="cell" value="2026-10-10 12:00:00" /></td>
+                <td><input class="cell" /></td>
+                <td></td><td></td><td></td>
+              </tr>
+              <tr>
+                <td class="rowhead">7</td>
+                <td></td>
+                <td><button class="chip fm">SF NJ122</button></td>
+                <td class="auto">122 Logistics Dr</td>
+                <td class="auto">FM</td>
+                <td><select class="cell"><option></option><option>26'</option><option>53'</option></select></td>
+                <td class="auto">NJ</td>
+                <td class="auto price">150</td>
+                <td><input class="cell" value="2026-10-10 12:00:00" /></td>
+                <td><input class="cell" /></td>
+                <td></td><td></td><td></td>
+              </tr>
+              <tr>
+                <td class="rowhead">8</td>
+                <td></td>
+                <td><button class="chip fm">YANWEN-FM</button></td>
+                <td class="auto">600 Port St</td>
+                <td class="auto">FM</td>
+                <td><select class="cell"><option></option><option>26'</option><option>53'</option></select></td>
+                <td class="auto">NJ</td>
+                <td class="auto price"></td>
+                <td><input class="cell" value="2026-10-10 12:00:00" /></td>
+                <td><input class="cell" /></td>
+                <td></td><td></td><td></td>
+              </tr>
+              <tr>
+                <td class="rowhead">9</td>
+                <td></td>
+                <td><button class="chip inspire">QuickBox NJ415</button></td>
+                <td class="auto">415 Industrial Ave</td>
+                <td class="auto">Inspire</td>
+                <td><select class="cell"><option>53'</option><option>26'</option></select></td>
+                <td class="auto">NJ</td>
+                <td class="auto price">400</td>
+                <td><input class="cell" value="2026-10-10 12:00:00" /></td>
+                <td><input class="cell" /></td>
+                <td></td><td></td><td></td>
+              </tr>
+              <tr>
+                <td class="rowhead">10</td>
+                <td></td>
+                <td><button class="chip inspire">THG Ingenuity</button></td>
+                <td class="auto">300 Corporate Ct</td>
+                <td class="auto">Inspire</td>
+                <td><select class="cell"><option>53'</option><option>26'</option></select></td>
+                <td class="auto">NJ</td>
+                <td class="auto price">155</td>
+                <td><input class="cell" value="2026-10-10 12:00:00" /></td>
+                <td><input class="cell" /></td>
+                <td></td><td></td><td></td>
+              </tr>
+              <tr>
+                <td class="rowhead">11</td>
+                <td></td>
+                <td><button class="chip">运力卡车</button></td>
+                <td class="auto">Warehouse Rd</td>
+                <td class="auto">运力卡车</td>
+                <td><select class="cell"><option>26'</option><option>53'</option></select></td>
+                <td class="auto">NJ</td>
+                <td class="auto price">220</td>
+                <td><input class="cell" value="2026-10-10 12:00:00" /></td>
+                <td><input class="cell" /></td>
+                <td></td><td></td><td></td>
+              </tr>
+              <tr class="total">
+                <td class="rowhead">12</td>
+                <td></td><td></td><td class="auto"></td><td class="auto"></td>
+                <td></td><td class="auto"></td>
+                <td class="auto price">1805</td>
+                <td></td><td></td><td></td><td></td><td></td>
+              </tr>
+              <tr>
+                <td class="rowhead">13</td>
+                <td></td>
+                <td></td>
+                <td class="auto"></td>
+                <td class="auto"></td>
+                <td></td>
+                <td class="auto"></td>
+                <td class="auto"></td>
+                <td></td>
+                <td></td>
+                <td class="bold note">需确认是否有提货</td>
+                <td class="bold">Han Express</td>
+                <td class="bold">SD</td>
+              </tr>
+              <tr>
+                <td class="rowhead">14</td>
+                <td></td><td></td><td class="auto"></td><td class="auto"></td>
+                <td></td><td class="auto"></td><td class="auto"></td>
+                <td></td><td></td>
+                <td>Capacity NJ1112</td>
+                <td></td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="daily" class="view">
+        <div class="legend">四个粘贴格对应现在 daily list 的 A–D 列，颜色也一样。点进去可以直接改名单。</div>
+        <div class="grid-wrap">
+          <table class="grid paste-table">
+            <thead>
+              <tr>
+                <th class="rowhead"></th>
+                <th>A</th><th>B</th><th>C</th><th>D</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="rowhead">1</td>
+                <td>2026-10-10</td>
+                <td></td><td></td><td></td>
+              </tr>
+              <tr>
+                <td class="rowhead">2</td>
+                <td class="paste-head col-han">Han Express</td>
+                <td class="paste-head col-inspire">Inspire</td>
+                <td class="paste-head col-fm">FM</td>
+                <td class="paste-head col-sd">SD</td>
+              </tr>
+              <tr>
+                <td class="rowhead">3</td>
+                <td class="col-han">
+                  <textarea class="paste">2026-10-10
+【80S】
+本地提货600
+1. StockX-NJ600
+2. NJ TT1001-NJ TT245-NJ600</textarea>
+                </td>
+                <td class="col-inspire">
+                  <textarea class="paste">2026-10-10
+本地提货
+1. QuickBox NJ415
+2. THG NJ300</textarea>
+                </td>
+                <td class="col-fm">
+                  <textarea class="paste">2026-10-10
+本地提货
+1. SF NJ122-YANWEN</textarea>
+                </td>
+                <td class="col-sd">
+                  <textarea class="paste" placeholder="粘贴 (SD) 列表在此处">2026-10-10
+本地提货
+11. Capacity 1000-Capacity 1112</textarea>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="results" class="view">
+        <div class="legend">和现在 results 一样：上面合计，下面站点明细。D 列 Official location 是手对的下拉。</div>
+        <div class="grid-wrap">
+          <table class="grid">
+            <thead>
+              <tr>
+                <th class="rowhead"></th>
+                <th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>F</th><th>G</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="rowhead">1</td>
+                <td class="bold" colspan="4">Results 2026-10-10</td>
+                <td></td><td></td><td></td>
+              </tr>
+              <tr>
+                <td class="rowhead">2</td>
+                <td class="bold">承运商</td>
+                <td class="bold">类型</td>
+                <td class="bold yellow">车次</td>
+                <td class="bold yellow">站点</td>
+                <td></td><td></td><td></td>
+              </tr>
+              <tr>
+                <td class="rowhead">3</td>
+                <td class="bold">合计</td>
+                <td></td>
+                <td class="yellow">6</td>
+                <td class="yellow">9</td>
+                <td></td><td></td><td></td>
+              </tr>
+              <tr>
+                <td class="rowhead">4</td>
+                <td>Han Express</td><td>本地</td><td>2</td><td>3</td>
+                <td></td><td></td><td></td>
+              </tr>
+              <tr>
+                <td class="rowhead">10</td>
+                <td class="bold" colspan="3">站点明细</td>
+                <td></td><td></td><td></td><td></td>
+              </tr>
+              <tr>
+                <td class="rowhead">11</td>
+                <td class="bold">Carrier</td>
+                <td class="bold">Kind</td>
+                <td class="bold">Raw station</td>
+                <td class="bold">Official location</td>
+                <td class="bold">Truck</td>
+                <td class="bold">Dest</td>
+                <td class="bold">Job #</td>
+              </tr>
+              <tr>
+                <td class="rowhead">12</td>
+                <td>Han Express</td><td>本地</td><td>StockX</td>
+                <td><select class="cell"><option>StockX</option><option>StockX NJ1</option></select></td>
+                <td>26'</td><td>JFK</td><td>1</td>
+              </tr>
+              <tr>
+                <td class="rowhead">13</td>
+                <td>Han Express</td><td>本地</td><td>NJ TT1001</td>
+                <td><select class="cell"><option>NJ TT1001</option></select></td>
+                <td>26'</td><td>600</td><td>2</td>
+              </tr>
+              <tr>
+                <td class="rowhead">14</td>
+                <td>Inspire</td><td>本地</td><td>QuickBox NJ415</td>
+                <td><select class="cell"><option>QuickBox Fulfillment - NJ</option><option>QuickBox NJ415</option></select></td>
+                <td></td><td>600</td><td>1</td>
+              </tr>
+              <tr>
+                <td class="rowhead">15</td>
+                <td>FM</td><td>本地</td><td>SF NJ122</td>
+                <td><select class="cell"><option>SF NJ122</option><option>SF-FM</option></select></td>
+                <td></td><td>600</td><td>1</td>
+              </tr>
+              <tr>
+                <td class="rowhead">16</td>
+                <td>SD</td><td>本地</td><td>Capacity 1000</td>
+                <td><select class="cell"><option>Capacity NJ1000</option><option>Capacity NJ1112</option></select></td>
+                <td></td><td>600</td><td>11</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="database" class="view">
+        <div class="legend">目录仍是现在 database 那张宽表的样子。网页后台会拆开存，但改的时候还是按行看。</div>
+        <div class="grid-wrap">
+          <table class="grid">
+            <thead>
+              <tr>
+                <th class="rowhead"></th>
+                <th>A 状态</th>
+                <th>B 提货地点</th>
+                <th>C 地址</th>
+                <th>D 承运商</th>
+                <th>E 车型</th>
+                <th>F 州</th>
+                <th>G 价格</th>
+                <th>H 日程</th>
+                <th>K 生效日</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="rowhead">2</td>
+                <td>ACTIVE</td>
+                <td><input class="cell" value="QuickBox Fulfillment - NJ" /></td>
+                <td><input class="cell" value="415 Industrial Ave" /></td>
+                <td>Inspire Logistics</td>
+                <td>53</td>
+                <td>NJ</td>
+                <td class="price">400</td>
+                <td></td>
+                <td>2026-10-01</td>
+              </tr>
+              <tr>
+                <td class="rowhead">3</td>
+                <td>ACTIVE</td>
+                <td><input class="cell" value="SF NJ122" /></td>
+                <td><input class="cell" value="122 Logistics Dr" /></td>
+                <td>FINALMILE</td>
+                <td></td>
+                <td>NJ</td>
+                <td class="price">150</td>
+                <td></td>
+                <td>2026-06-26</td>
+              </tr>
+              <tr>
+                <td class="rowhead">4</td>
+                <td>ACTIVE</td>
+                <td><input class="cell" value="Capacity NJ1000" /></td>
+                <td><input class="cell" value="1000 Industrial Pkwy" /></td>
+                <td>SHUNDA</td>
+                <td></td>
+                <td>NJ</td>
+                <td class="price">400</td>
+                <td></td>
+                <td>2026-07-15</td>
+              </tr>
+              <tr>
+                <td class="rowhead">5</td>
+                <td>INACTIVE</td>
+                <td><input class="cell" value="Serene Herbs" /></td>
+                <td><input class="cell" /></td>
+                <td></td>
+                <td></td>
+                <td>VA</td>
+                <td class="price"></td>
+                <td></td>
+                <td>2026-06-26</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <nav class="tabs">
+      <button class="tab active" data-view="ewr">EWR本地提货单量</button>
+      <button class="tab" data-view="database">database</button>
+      <button class="tab" data-view="daily">daily list</button>
+      <button class="tab" data-view="results">results</button>
+    </nav>
+  </div>
+  <script>
+    document.querySelectorAll(".tab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+        tab.classList.add("active");
+        document.getElementById(tab.dataset.view).classList.add("active");
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1382,7 +1382,7 @@ function stationAliasKeys_(name) {
     ["sfnj122", "sf-fm", "sffm"],
     ["nj250", "ocnj250"],
     ["nj1401", "ocnj1401", "cainiaonj1401"],
-    ["shipbob", "shipbob4779"],
+    ["shipbob", "shipbob4779", "shipbob4755"],
     ["stockxnj1", "stockx"],
     ["quickboxnj415", "quickboxfulfillment-nj", "quickboxfulfillmentnj"]
   ];
