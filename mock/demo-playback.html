@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pickup demo — sanitized autoplay</title>
+  <style>
+    :root {
+      --line: #e2e3e3;
+      --head: #f8f9fa;
+      --auto: #f3f3f3;
+      --text: #202124;
+      --muted: #5f6368;
+      --select: #1a73e8;
+      --a: #d0e2ff;
+      --b: #fff2cc;
+      --c: #d9ead3;
+      --d: #fce5cd;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      color: var(--text);
+      font: 13px/1.35 Arial, Helvetica, sans-serif;
+      background: #f8f9fa;
+    }
+    .app { display: flex; flex-direction: column; height: 100%; }
+    .menubar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 40px;
+      padding: 0 12px;
+      background: #fff;
+      border-bottom: 1px solid #dadce0;
+    }
+    .brand { font-weight: 700; font-size: 14px; }
+    .tag {
+      font-size: 11px;
+      color: #174ea6;
+      background: #e8f0fe;
+      border-radius: 10px;
+      padding: 2px 8px;
+    }
+    .date { color: var(--muted); }
+    .menu { display: flex; gap: 6px; margin-left: 8px; }
+    .menu button {
+      height: 26px;
+      padding: 0 10px;
+      border: 1px solid #dadce0;
+      background: #fff;
+      border-radius: 4px;
+      font: inherit;
+      cursor: default;
+    }
+    .menu button.primary { background: #e8f0fe; border-color: #d2e3fc; color: #174ea6; }
+    .menu button.hot {
+      outline: 2px solid var(--select);
+      outline-offset: 1px;
+      box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.18);
+    }
+    .caption {
+      margin-left: auto;
+      color: #174ea6;
+      font-size: 12px;
+      font-weight: 600;
+      max-width: 46%;
+      text-align: right;
+    }
+    .replay {
+      height: 26px;
+      padding: 0 10px;
+      border: 1px solid #dadce0;
+      background: #fff;
+      border-radius: 4px;
+      font: inherit;
+      cursor: pointer;
+    }
+    .sheet { flex: 1; display: flex; flex-direction: column; min-height: 0; background: #fff; }
+    .grid-wrap { flex: 1; overflow: auto; min-height: 0; }
+    table.grid { border-collapse: collapse; min-width: 100%; }
+    .grid th, .grid td {
+      border: 1px solid var(--line);
+      padding: 2px 6px;
+      height: 24px;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+    .grid thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: var(--head);
+      font-weight: 600;
+      text-align: center;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .grid .rowhead {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      width: 36px;
+      min-width: 36px;
+      background: var(--head);
+      text-align: center;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .grid thead .rowhead { z-index: 3; }
+    .grid td { background: #fff; }
+    .grid td.auto { background: var(--auto); color: #3c4043; }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 0 8px;
+      border-radius: 12px;
+      height: 18px;
+      background: #e6f4ea;
+      color: #137333;
+    }
+    .chip.a { background: var(--a); color: #174ea6; }
+    .chip.b { background: var(--b); color: #7a5c00; }
+    .chip.c { background: var(--c); color: #0d652d; }
+    .chip.d { background: var(--d); color: #8a4b08; }
+    .price { text-align: right; }
+    .total td { font-weight: 700; }
+    .note { color: #b06000; }
+    .bold { font-weight: 700; }
+    .yellow { background: #fff2cc; }
+    .flash { background: #fff8c5 !important; }
+    .typed { box-shadow: inset 0 0 0 2px var(--select); }
+    .paste-table td { height: auto; vertical-align: top; padding: 0; }
+    .paste-head { font-weight: 700; padding: 2px 6px !important; }
+    textarea.paste {
+      width: 100%;
+      min-height: 280px;
+      border: 0;
+      resize: none;
+      padding: 8px;
+      font: 13px/1.45 Arial, Helvetica, sans-serif;
+      background: transparent;
+    }
+    .col-a { background: var(--a); }
+    .col-b { background: var(--b); }
+    .col-c { background: var(--c); }
+    .col-d { background: var(--d); }
+    .tabs {
+      display: flex;
+      align-items: stretch;
+      height: 36px;
+      background: #f8f9fa;
+      border-top: 1px solid #dadce0;
+      padding: 0 8px;
+    }
+    .tab {
+      border: 0;
+      background: transparent;
+      padding: 0 16px;
+      font: inherit;
+      color: var(--muted);
+    }
+    .tab.active {
+      background: #fff;
+      color: var(--text);
+      font-weight: 600;
+      box-shadow: inset 0 2px 0 #188038;
+    }
+    .view { display: none; height: 100%; }
+    .view.active { display: flex; flex-direction: column; }
+    .legend {
+      padding: 6px 12px;
+      color: var(--muted);
+      font-size: 12px;
+      border-bottom: 1px solid #eee;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="menubar">
+      <div class="brand">EWR Pickup</div>
+      <span class="tag">Sanitized demo</span>
+      <div class="date">2026-10-12</div>
+      <div class="menu">
+        <button id="btn-parse">Parse lists</button>
+        <button id="btn-fill">Fill today</button>
+        <button id="btn-confirm" class="primary">Confirm</button>
+      </div>
+      <button class="replay" id="btn-replay" type="button">Replay</button>
+      <div class="caption" id="caption">Preparing autoplay…</div>
+    </div>
+
+    <div class="sheet">
+      <section id="daily" class="view active">
+        <div class="legend">Daily list: four carrier lists for the day. Demo uses Carrier A–D / Partner A–I. No real station names.</div>
+        <div class="grid-wrap">
+          <table class="grid paste-table">
+            <thead>
+              <tr><th class="rowhead"></th><th>A</th><th>B</th><th>C</th><th>D</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="rowhead">1</td>
+                <td>2026-10-12</td>
+                <td></td><td></td><td></td>
+              </tr>
+              <tr>
+                <td class="rowhead">2</td>
+                <td class="paste-head col-a">Carrier A</td>
+                <td class="paste-head col-b">Carrier B</td>
+                <td class="paste-head col-c">Carrier C</td>
+                <td class="paste-head col-d">Carrier D</td>
+              </tr>
+              <tr>
+                <td class="rowhead">3</td>
+                <td class="col-a"><textarea id="paste-a" class="paste" readonly></textarea></td>
+                <td class="col-b"><textarea id="paste-b" class="paste" readonly></textarea></td>
+                <td class="col-c"><textarea id="paste-c" class="paste" readonly></textarea></td>
+                <td class="col-d"><textarea id="paste-d" class="paste" readonly></textarea></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="results" class="view">
+        <div class="legend">Results: Parse splits jobs and official station names. Column D is the catalog Partner name.</div>
+        <div class="grid-wrap">
+          <table class="grid">
+            <thead>
+              <tr><th class="rowhead"></th><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>F</th><th>G</th></tr>
+            </thead>
+            <tbody id="results-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="ewr" class="view">
+        <div class="legend">Today’s log: Fill today writes location / carrier / truck type first. After pallet counts are entered, Confirm fills address, state, price, and the day total.</div>
+        <div class="grid-wrap">
+          <table class="grid">
+            <thead>
+              <tr>
+                <th class="rowhead"></th>
+                <th>A Date</th><th>B Pickup location</th><th>C Address</th><th>D Carrier</th>
+                <th>E Truck</th><th>F State</th><th>G Price</th>
+                <th>H Arrive warehouse</th><th>I Pallets</th><th>J</th><th>K</th><th>L</th>
+              </tr>
+            </thead>
+            <tbody id="ewr-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <nav class="tabs">
+      <button class="tab" data-view="ewr" id="tab-ewr">EWR local pickups</button>
+      <button class="tab active" data-view="daily" id="tab-daily">daily list</button>
+      <button class="tab" data-view="results" id="tab-results">results</button>
+    </nav>
+  </div>
+
+  <script>
+    const DATE = "2026-10-12";
+    const PASTES = {
+      a: `${DATE}\nLocal pickup 600\n1. Partner A\n2. Partner B-Partner C`,
+      b: `${DATE}\nLocal pickup\n1. Partner D\n2. Partner E`,
+      c: `${DATE}\nLocal pickup\n1. Partner F-Partner G`,
+      d: `${DATE}\nLocal pickup\n11. Partner H-Partner I`
+    };
+    const CATALOG = {
+      "Partner A": { addr: "100 Warehouse Rd, Suite 2", state: "NJ", price: 180, truck: "26'", cls: "a", carrier: "Carrier A", noon: false },
+      "Partner B": { addr: "200 Industrial Ave", state: "NJ", price: 200, truck: "26'", cls: "a", carrier: "Carrier A", noon: true },
+      "Partner C": { addr: "300 Commerce Blvd", state: "NJ", price: 100, truck: "26'", cls: "a", carrier: "Carrier A", noon: true },
+      "Partner D": { addr: "400 Fulfillment Pkwy", state: "NJ", price: 400, truck: "53'", cls: "b", carrier: "Carrier B", noon: true },
+      "Partner E": { addr: "500 Cedar Ln Suite A", state: "NJ", price: 155, truck: "53'", cls: "b", carrier: "Carrier B", noon: true },
+      "Partner F": { addr: "122 Logistics Dr", state: "NJ", price: 150, truck: "", cls: "c", carrier: "Carrier C", noon: true, group: "cfg" },
+      "Partner G": { addr: "600 Port St", state: "NJ", price: 150, truck: "", cls: "c", carrier: "Carrier C", noon: true, group: "cfg" },
+      "Partner H": { addr: "1000 Corporate Rd", state: "NJ", price: 400, truck: "", cls: "d", carrier: "Carrier D", noon: true, group: "cdh" },
+      "Partner I": { addr: "1112 Corporate Rd", state: "NJ", price: 400, truck: "", cls: "d", carrier: "Carrier D", noon: true, group: "cdh" }
+    };
+    const RESULT_ROWS = [
+      ["Carrier A", "Local", "Partner A", "Partner A", "26'", "600", "1"],
+      ["Carrier A", "Local", "Partner B", "Partner B", "26'", "600", "2"],
+      ["Carrier A", "Local", "Partner C", "Partner C", "26'", "600", "2"],
+      ["Carrier B", "Local", "Partner D", "Partner D", "53'", "600", "1"],
+      ["Carrier B", "Local", "Partner E", "Partner E", "53'", "600", "2"],
+      ["Carrier C", "Local", "Partner F", "Partner F", "", "600", "1"],
+      ["Carrier C", "Local", "Partner G", "Partner G", "", "600", "1"],
+      ["Carrier D", "Local", "Partner H", "Partner H", "", "600", "11"],
+      ["Carrier D", "Local", "Partner I", "Partner I", "", "600", "11"]
+    ];
+    const SUMMARY = [
+      ["Total", "", "6", "9"],
+      ["Carrier A", "Local", "2", "3"],
+      ["Carrier B", "Local", "2", "2"],
+      ["Carrier C", "Local", "1", "2"],
+      ["Carrier D", "Local", "1", "2"]
+    ];
+    const FILL_ORDER = ["Partner A", "Partner B", "Partner C", "Partner D", "Partner E", "Partner F", "Partner G", "Partner H", "Partner I"];
+    const HAND = { "Partner A": "2", "Partner B": "4", "Partner C": "2" };
+
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    let playing = false;
+
+    function showView(id) {
+      document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
+      document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+      document.getElementById(id).classList.add("active");
+      const tab = document.getElementById("tab-" + id);
+      if (tab) tab.classList.add("active");
+    }
+    function say(text) {
+      document.getElementById("caption").textContent = text;
+    }
+    function hot(id, on) {
+      document.getElementById(id).classList.toggle("hot", !!on);
+    }
+    function flash(el) {
+      if (!el) return;
+      el.classList.add("flash");
+      setTimeout(() => el.classList.remove("flash"), 420);
+    }
+
+    async function typeInto(el, text) {
+      el.value = "";
+      const parts = text.split("\n");
+      for (let i = 0; i < parts.length; i++) {
+        el.value = parts.slice(0, i + 1).join("\n");
+        el.scrollTop = el.scrollHeight;
+        await sleep(160);
+      }
+    }
+
+    function renderResults(n) {
+      const body = document.getElementById("results-body");
+      let html = `
+        <tr><td class="rowhead">1</td><td class="bold" colspan="4">Results ${DATE}</td><td></td><td></td><td></td></tr>
+        <tr><td class="rowhead">2</td><td class="bold">Carrier</td><td class="bold">Type</td><td class="bold yellow">Jobs</td><td class="bold yellow">Stations</td><td></td><td></td><td></td></tr>`;
+      SUMMARY.forEach((row, i) => {
+        const show = n < 0 || i < n;
+        html += `<tr><td class="rowhead">${3 + i}</td><td class="${i === 0 ? "bold" : ""}">${show ? row[0] : ""}</td><td>${show ? row[1] : ""}</td><td class="yellow">${show ? row[2] : ""}</td><td class="yellow">${show ? row[3] : ""}</td><td></td><td></td><td></td></tr>`;
+      });
+      html += `
+        <tr><td class="rowhead">8</td><td class="bold" colspan="3">Station detail</td><td></td><td></td><td></td><td></td></tr>
+        <tr><td class="rowhead">9</td><td class="bold">Carrier</td><td class="bold">Kind</td><td class="bold">Raw station</td><td class="bold">Official location</td><td class="bold">Truck</td><td class="bold">Dest</td><td class="bold">Job #</td></tr>`;
+      const detailCount = n < 0 ? 0 : Math.max(0, n - SUMMARY.length);
+      RESULT_ROWS.forEach((row, i) => {
+        const show = i < detailCount;
+        html += `<tr><td class="rowhead">${10 + i}</td><td>${show ? row[0] : ""}</td><td>${show ? row[1] : ""}</td><td>${show ? row[2] : ""}</td><td>${show ? row[3] : ""}</td><td>${show ? row[4] : ""}</td><td>${show ? row[5] : ""}</td><td>${show ? row[6] : ""}</td></tr>`;
+      });
+      body.innerHTML = html;
+    }
+
+    function emptyEwr(rows) {
+      const body = document.getElementById("ewr-body");
+      let html = "";
+      for (let i = 0; i < rows; i++) {
+        html += `<tr id="ewr-${i}">
+          <td class="rowhead">${2 + i}</td>
+          <td></td><td></td><td class="auto"></td><td class="auto"></td>
+          <td></td><td class="auto"></td><td class="auto price"></td>
+          <td></td><td></td><td></td><td></td><td></td>
+        </tr>`;
+      }
+      body.innerHTML = html;
+    }
+
+    function fillRow(i, name) {
+      const info = CATALOG[name];
+      const tr = document.getElementById("ewr-" + i);
+      const tds = tr.children;
+      tds[1].textContent = i === 0 ? DATE : "";
+      tds[2].innerHTML = `<span class="chip ${info.cls}">${name}</span>`;
+      tds[4].textContent = info.carrier;
+      tds[4].classList.add("auto");
+      tds[5].textContent = info.truck;
+      tds[8].textContent = info.noon ? DATE + " 12:00:00" : "";
+      flash(tr);
+    }
+
+    function typePallet(i, value) {
+      const td = document.getElementById("ewr-" + i).children[9];
+      td.textContent = value;
+      td.classList.add("typed");
+      flash(td);
+    }
+
+    function confirmRow(i, name, showPrice) {
+      const info = CATALOG[name];
+      const tds = document.getElementById("ewr-" + i).children;
+      tds[3].textContent = info.addr;
+      tds[6].textContent = info.state;
+      tds[7].textContent = showPrice ? info.price : "";
+      flash(tds[3]);
+      flash(tds[7]);
+    }
+
+    function writeFooter(total) {
+      const body = document.getElementById("ewr-body");
+      body.insertAdjacentHTML("beforeend", `
+        <tr class="total" id="ewr-total">
+          <td class="rowhead">11</td>
+          <td></td><td></td><td class="auto"></td><td class="auto"></td>
+          <td></td><td class="auto"></td>
+          <td class="auto price">${total}</td>
+          <td></td><td></td><td></td><td></td><td></td>
+        </tr>
+        <tr>
+          <td class="rowhead">12</td>
+          <td></td><td></td><td class="auto"></td><td class="auto"></td>
+          <td></td><td class="auto"></td><td class="auto"></td>
+          <td></td><td></td>
+          <td class="bold">Partner A</td>
+          <td>$180-1</td>
+          <td>26'-2plts</td>
+        </tr>
+        <tr>
+          <td class="rowhead">13</td>
+          <td></td><td></td><td class="auto"></td><td class="auto"></td>
+          <td></td><td class="auto"></td><td class="auto"></td>
+          <td></td><td></td>
+          <td class="bold note">Confirm if pickup exists</td>
+          <td class="bold">Carrier D</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td class="rowhead">14</td>
+          <td></td><td></td><td class="auto"></td><td class="auto"></td>
+          <td></td><td class="auto"></td><td class="auto"></td>
+          <td></td><td></td>
+          <td>Partner I</td>
+          <td></td>
+          <td></td>
+        </tr>`);
+      flash(document.getElementById("ewr-total"));
+    }
+
+    function reset() {
+      document.getElementById("paste-a").value = "";
+      document.getElementById("paste-b").value = "";
+      document.getElementById("paste-c").value = "";
+      document.getElementById("paste-d").value = "";
+      document.getElementById("results-body").innerHTML = "";
+      document.getElementById("ewr-body").innerHTML = "";
+      ["btn-parse", "btn-fill", "btn-confirm"].forEach((id) => hot(id, false));
+      showView("daily");
+    }
+
+    async function play() {
+      if (playing) return;
+      playing = true;
+      reset();
+      say("1/5  Paste the four carrier lists into Daily list");
+      await sleep(500);
+      await typeInto(document.getElementById("paste-a"), PASTES.a);
+      await typeInto(document.getElementById("paste-b"), PASTES.b);
+      await typeInto(document.getElementById("paste-c"), PASTES.c);
+      await typeInto(document.getElementById("paste-d"), PASTES.d);
+      await sleep(400);
+
+      say("2/5  Parse lists: split jobs and match official Partner names");
+      hot("btn-parse", true);
+      await sleep(700);
+      showView("results");
+      renderResults(0);
+      for (let i = 1; i <= SUMMARY.length + RESULT_ROWS.length; i++) {
+        renderResults(i);
+        await sleep(140);
+      }
+      hot("btn-parse", false);
+      await sleep(600);
+
+      say("3/5  Fill today: write official stations into today’s log");
+      hot("btn-fill", true);
+      await sleep(500);
+      showView("ewr");
+      emptyEwr(FILL_ORDER.length);
+      await sleep(200);
+      for (let i = 0; i < FILL_ORDER.length; i++) {
+        fillRow(i, FILL_ORDER[i]);
+        await sleep(220);
+      }
+      hot("btn-fill", false);
+      await sleep(500);
+
+      say("4/5  Enter today’s pallet counts (typed automatically in the demo)");
+      for (const [name, qty] of Object.entries(HAND)) {
+        typePallet(FILL_ORDER.indexOf(name), qty);
+        await sleep(380);
+      }
+      await sleep(500);
+
+      say("5/5  Confirm: fill address / state / price and write the day total");
+      hot("btn-confirm", true);
+      await sleep(500);
+      const priced = new Set();
+      let total = 0;
+      for (let i = 0; i < FILL_ORDER.length; i++) {
+        const name = FILL_ORDER[i];
+        const info = CATALOG[name];
+        const showPrice = !info.group || !priced.has(info.group);
+        if (showPrice) {
+          total += info.price;
+          if (info.group) priced.add(info.group);
+        }
+        confirmRow(i, name, showPrice);
+        await sleep(180);
+      }
+      writeFooter(total);
+      hot("btn-confirm", false);
+      say("Playback finished. 6 jobs / 9 stations, total $" + total + ". Click Replay to watch again.");
+      playing = false;
+    }
+
+    document.getElementById("btn-replay").addEventListener("click", () => {
+      if (!playing) play();
+    });
+    play();
+  </script>
+</body>
+</html>
