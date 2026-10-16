@@ -34,6 +34,9 @@ const CHARTER_GROUPS = [
   { id: "CHARTER_SHIPCUBE", locations: ["ShipCube PA11200", "ShipCube PA700"] }
 ];
 
+// database Note: "1Commerce NJ125+SireShark NJ1=$350"
+const SHARE_TRIP_NOTE_RE_ = /^(.+?)\s*\+\s*(.+?)\s*=\s*\$?\s*(\d+(?:\.\d+)?)\s*$/;
+
 const COL = { ADDRESS: 2, CARRIER: 3, TRUCK: 4, STATE: 5, PRICE: 6, ARRIVAL: 7, PALLETS: 8, TIKTOK_LABEL: 9, TIKTOK_PRICE: 10, TIKTOK_TRUCK: 11 };
 
 const TIKTOK_MERCHANTS = ["NJ TT1001", "NJ TT245", "NJ TT511", "Swift X NJ650"];
@@ -232,6 +235,89 @@ function applyCharterPricing(data, charterMeta) {
   });
 }
 
+function parseShareTripNote_(note) {
+  const groups = [];
+  String(note || "").split(/\r?\n/).forEach(line => {
+    const m = String(line || "").trim().match(SHARE_TRIP_NOTE_RE_);
+    if (!m) return;
+    const a = m[1].trim();
+    const b = m[2].trim();
+    const price = Number(m[3]);
+    if (!a || !b || !isFinite(price) || price <= 0) return;
+    groups.push({ locations: [a, b], price: price });
+  });
+  return groups;
+}
+
+function loadShareTripGroups_(db) {
+  const groups = [];
+  const seen = {};
+  (db || []).forEach(r => {
+    parseShareTripNote_(r[8]).forEach(g => {
+      const id = g.locations.map(compact).sort().join("|");
+      if (!id || seen[id]) return;
+      seen[id] = true;
+      groups.push({ id: id, locations: g.locations, price: g.price });
+    });
+  });
+  return groups;
+}
+
+function locationInShareGroup_(name, group) {
+  return (group.locations || []).some(loc => matchLocation(name, loc) || matchLocation(loc, name));
+}
+
+function assignShareTripMeta_(data, results, groups) {
+  const meta = new Array((data || []).length).fill(null);
+  if (!groups || !groups.length || !results || !results.length) return meta;
+
+  const resultShare = [];
+  groups.forEach(g => {
+    const byJob = {};
+    results.forEach((r, idx) => {
+      const name = r.official || r.raw;
+      if (!locationInShareGroup_(name, g)) return;
+      const job = String(r.job || "").trim();
+      if (!job) return;
+      const k = (resultCarrierKey_(r.carrier) || normalize(r.carrier)) + "|" + job;
+      if (!byJob[k]) byJob[k] = [];
+      byJob[k].push(idx);
+    });
+    Object.keys(byJob).forEach(k => {
+      const idxs = byJob[k];
+      const names = {};
+      idxs.forEach(idx => {
+        const name = results[idx].official || results[idx].raw;
+        const loc = g.locations.find(l => matchLocation(name, l) || matchLocation(l, name));
+        if (loc) names[normalize(loc)] = true;
+      });
+      if (Object.keys(names).length < 2) return;
+      idxs.forEach(idx => {
+        resultShare[idx] = { group: g.id + "|" + k, price: g.price };
+      });
+    });
+  });
+
+  const used = {};
+  for (let i = 0; i < data.length; i++) {
+    const location = String(data[i][1] || "").trim();
+    if (!location) continue;
+    const ewrCarrier = resultCarrierKey_(mapCarrierName(data[i][COL.CARRIER]));
+    for (let j = 0; j < results.length; j++) {
+      if (used[j]) continue;
+      const r = results[j];
+      const name = r.official || r.raw;
+      if (!matchLocation(location, name) && !matchLocation(name, location)) continue;
+      const rc = resultCarrierKey_(r.carrier);
+      if (ewrCarrier && rc && ewrCarrier !== rc) continue;
+      used[j] = true;
+      if (resultShare[j]) meta[i] = resultShare[j];
+      break;
+    }
+  }
+  return meta;
+}
+
 function fillPickupData() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   const cell = sheet.getActiveCell();
@@ -416,10 +502,12 @@ function fillConfirmCfg_(sheet, startRow, endRow, dateValue, options) {
   const range = sheet.getRange(startRow, 1, endRow - startRow + 1, 12);
   const data = range.getValues();
   const charterMeta = new Array(data.length).fill(null);
-  const db = loadDatabase(SpreadsheetApp.getActiveSpreadsheet().getSheetByName("database"));
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const db = loadDatabase(ss.getSheetByName("database"));
   enrichCharterDbRows(db);
   const rules = loadRules_();
-  const sdCapJobs = loadSdCapacityJobKeys_(SpreadsheetApp.getActiveSpreadsheet());
+  const sdCapJobs = loadSdCapacityJobKeys_(ss);
+  const shareMeta = assignShareTripMeta_(data, loadLocalResultRows_(ss), loadShareTripGroups_(db));
   let sdCapIdx = 0;
 
   for (let i = 0; i < data.length; i++) {
@@ -490,6 +578,9 @@ function fillConfirmCfg_(sheet, startRow, endRow, dateValue, options) {
 
     if (isCharter) {
       charterMeta[i] = { group: charterGroup, price: basePrice };
+      data[i][COL.PRICE] = "";
+    } else if (shareMeta[i]) {
+      charterMeta[i] = shareMeta[i];
       data[i][COL.PRICE] = "";
     } else {
       let price = basePrice;
@@ -1384,7 +1475,10 @@ function stationAliasKeys_(name) {
     ["nj1401", "ocnj1401", "cainiaonj1401"],
     ["shipbob", "shipbob4779", "shipbob4755"],
     ["stockxnj1", "stockx"],
-    ["quickboxnj415", "quickboxfulfillment-nj", "quickboxfulfillmentnj"]
+    ["quickboxnj415", "quickboxfulfillment-nj", "quickboxfulfillmentnj"],
+    ["1commercenj125", "1commerce"],
+    ["packagemannj208", "packageman"],
+    ["raicompa815", "raicom"]
   ];
   for (let i = 0; i < groups.length; i++) {
     if (groups[i].indexOf(c) !== -1) return groups[i].slice();
