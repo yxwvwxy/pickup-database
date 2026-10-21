@@ -1,5 +1,5 @@
 # Local Pickup Tracker
 
-<video src="docs/demo.mp4" controls playsinline width="960"></video>
+[Demo (anonymized sample, process logic only)](docs/demo.mp4)
 
-[docs/demo.mp4](docs/demo.mp4)
+![Local Pickup Tracker](docs/demo.gif)
