@@ -1,3 +1,14 @@
+/**
+ * 10.24.26 end code. Kept in the repo only. Do not paste this into the Google Sheet.
+ */
+var LEGACY_LOGIC_LAST_DATE = new Date(2026, 9, 24);
+
+function recordUsesLegacyLogic_(dateValue) {
+  const d = parseSheetDate(dateValue);
+  if (!d) return true;
+  return d.getTime() <= LEGACY_LOGIC_LAST_DATE.getTime();
+}
+
 function onOpen(e) {
   SpreadsheetApp.getUi()
     .createMenu("Auto")
@@ -5,12 +16,23 @@ function onOpen(e) {
     .addItem("Fill today", "fillToday")
     .addItem("Confirm", "confirmToday")
     .addItem("Run manual", "runManualToday")
+    .addItem("Run cost per unit", "runCostPerUnit")
     .addToUi();
   rolloverDailyListIfNewDay_();
 }
 
 function onEdit(e) {
   restorePastePlaceholderOnEdit_(e);
+}
+
+function runCostPerUnit() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const cell = sheet.getActiveCell();
+  if (normalize(sheet.getName()) !== "records" || cell.getRow() !== 1 || cell.getColumn() !== 9) {
+    SpreadsheetApp.getUi().alert("先选中 Records 的 I1「COST_PER_UNIT」表头。");
+    return;
+  }
+  fillCostPerUnit1025_(sheet);
 }
 
 function normalize(str) {
@@ -318,6 +340,7 @@ function assignShareTripMeta_(data, results, groups) {
   return meta;
 }
 
+// Through 2026-10-24. From 2026-10-25 this hands off to LogicFrom20261025.gs.
 function fillPickupData() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   const cell = sheet.getActiveCell();
@@ -330,13 +353,22 @@ function fillPickupData() {
     SpreadsheetApp.getUi().alert("Column A must be a date.");
     return;
   }
+  if (!recordUsesLegacyLogic_(dateValue)) {
+    fillPickupDataFrom1025_(sheet, cell.getRow(), dateValue);
+    return;
+  }
   const startRow = cell.getRow();
   fillConfirmCfg_(sheet, startRow, findDateBlockEnd_(sheet, startRow), dateValue);
 }
 
+// Through 2026-10-24. From 2026-10-25 this hands off to LogicFrom20261025.gs.
 function confirmToday() {
   const selected = requireEwrDateCell_();
   if (!selected) return;
+  if (!recordUsesLegacyLogic_(selected.date)) {
+    confirmTodayFrom1025_(selected);
+    return;
+  }
   const sheet = selected.sheet;
   const dateValue = selected.date;
   const startRow = selected.cell.getRow();
@@ -348,9 +380,14 @@ function confirmToday() {
   writeTikTokSummary_(sheet, startRow, findDateBlockEnd_(sheet, startRow));
 }
 
+// Through 2026-10-24. From 2026-10-25 this hands off to LogicFrom20261025.gs.
 function runManualToday() {
   const selected = requireEwrDateCell_();
   if (!selected) return;
+  if (!recordUsesLegacyLogic_(selected.date)) {
+    runManualTodayFrom1025_(selected);
+    return;
+  }
   const sheet = selected.sheet;
   const dateValue = selected.date;
   const startRow = selected.cell.getRow();
@@ -972,9 +1009,14 @@ function clearAnalysisResults_(sheet) {
   range.clearDataValidations();
 }
 
+// Through 2026-10-24. From 2026-10-25 this hands off to LogicFrom20261025.gs.
 function parseDailyCarrierLists() {
   const selected = requireDailyListDateCell_();
   if (!selected) return;
+  if (!recordUsesLegacyLogic_(selected.date)) {
+    parseDailyCarrierListsFrom1025_(selected);
+    return;
+  }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = selected.sheet;
   const dbNames = loadDatabaseLocationNames_(ss);
@@ -1040,9 +1082,14 @@ function parseDailyCarrierLists() {
   SpreadsheetApp.getUi().alert("Parsed " + trucks + " trucks, " + parsed.length + " stations. Results " + Utilities.formatDate(listDate, getSpreadsheetTz(), "yyyy-MM-dd") + " is ready.");
 }
 
+// Through 2026-10-24. From 2026-10-25 this hands off to LogicFrom20261025.gs.
 function fillToday() {
   const selected = requireEwrDateCell_();
   if (!selected) return;
+  if (!recordUsesLegacyLogic_(selected.date)) {
+    fillTodayFrom1025_(selected);
+    return;
+  }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = selected.sheet;
   const date = selected.date;
