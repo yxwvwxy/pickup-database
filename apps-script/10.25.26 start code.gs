@@ -5,7 +5,8 @@
  * Parse lists reads the text pasted on daily list and writes Records directly.
  * Select row-1 date to parse A-D (Han Express / Inspire / FM / SD).
  * In Han Express (A), only the 【NJ600提货】 section is used.
- * Select E2 (NJ100/936) to parse column E 【NJ100提货】 or 【NJ936提货】.
+ * Select E2 (NJ100) to parse column E 【NJ100提货】 or 【NJ936提货】.
+ * NJ100 parse writes REGION as EWR100; A-D parse writes EWR600.
  * results is not used.
  *
  * One line is one truck. The size is written after the trip number:
@@ -27,16 +28,17 @@
  * the block (e.g. H23), or drag H23:H67; it only confirms that row range,
  * fills mapping for added origins, and updates the trip rate.
  * Origin Name 1/2/3 use a dropdown from Pickup Rate column F.
- * RATE and Carrier come from the one Pickup Rate row with the same stops,
- * the same 26' or 53', and destination EWR or JFK. NJ600, EWR600, NJ100,
- * and NJ936 temporarily match EWR rates. JFK175 matches JFK.
- * No matching price is left blank and highlighted.
+ * RATE and Carrier come from Pickup Rate columns B-E (route/price/vehicle/
+ * carrier) only when column A is active. Merchant mapping uses columns G+
+ * independently and is not filtered by A. NJ600, EWR600, NJ100, and NJ936
+ * temporarily match EWR rates. JFK175 matches JFK. No matching price is
+ * left blank and highlighted.
  * Capacity-EWR is not grouped by 5 stops. Each Capacity truck on the list is
  * one full truck at that row's price. JD NJ1570 / Yanwen / SF NJ122 is a flat
  * charter: one truck at that row's price even when the FM list splits them
  * onto separate lines (merged into Origin 1/2/3). Weekday text on the rate
  * row is ignored.
- * DATE is the date selected on daily list. REGION is EWR600.
+ * DATE is the date selected on daily list. REGION is EWR600 or EWR100.
  * LANE_TYPE is Scheduled. Row 2 of Records is the sample and is not touched.
  * Parse always appends after the last record with one blank row in between.
  * Existing rows for the same date are not overwritten.
@@ -93,7 +95,7 @@ function dailyPastePlaceholder1025_(column) {
   if (column === 2) return "粘贴 (Inspire) 列表在此处";
   if (column === 3) return "粘贴 (FM) 列表在此处";
   if (column === 4) return "粘贴 (SD) 列表在此处";
-  if (column === 5) return "粘贴（NJ100/936）提货列表在此处";
+  if (column === 5) return "粘贴（NJ100）提货列表在此处";
   return "粘贴在此处";
 }
 
@@ -167,8 +169,10 @@ function confirmPalletCount() {
   const range = sheet.getRange(start, 1, height, RECORD_COLS_1025_);
   const values = range.getValues();
   let lastDate = "";
+  let lastRegion = "";
   if (start > RECORD_FIRST_ROW_1025_) {
     lastDate = String(sheet.getRange(start - 1, 1).getDisplayValue() || "").trim();
+    lastRegion = String(sheet.getRange(start - 1, 2).getDisplayValue() || "").trim();
   }
   let confirmed = 0;
   let missingNames = 0;
@@ -185,9 +189,10 @@ function confirmPalletCount() {
     const hasPallet = pallets.some(function (item) { return item; });
     if (!hasName && !hasPallet) return;
     if (row[0]) lastDate = row[0];
+    if (row[1]) lastRegion = row[1];
     if (hasName && !row[0] && lastDate) {
       row[0] = lastDate;
-      if (!row[1]) row[1] = "EWR600";
+      if (!row[1]) row[1] = lastRegion || "EWR600";
       if (!row[2]) row[2] = "Scheduled";
     }
     ORIGIN_SLOTS_1025_.forEach(function (slot, index) {
@@ -448,7 +453,7 @@ function requireDailyListParseSelection_() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   const cell = sheet.getActiveCell();
   if (!isDailyListSheet_(sheet)) {
-    SpreadsheetApp.getUi().alert("先到 daily list，选中 A1:D1 日期格，或 E2（NJ100/936）。");
+    SpreadsheetApp.getUi().alert("先到 daily list，选中 A1:D1 日期格，或 E2（NJ100）。");
     return null;
   }
   if (cell.getRow() === 2 && cell.getColumn() === 5) {
@@ -457,7 +462,7 @@ function requireDailyListParseSelection_() {
       SpreadsheetApp.getUi().alert("A1 必须是日期。");
       return null;
     }
-    return { sheet: sheet, date: date, mode: "nj100936" };
+    return { sheet: sheet, date: date, mode: "nj100" };
   }
   if (cell.getRow() === 1 && cell.getColumn() <= 4) {
     const date = parseSheetDate(cell);
@@ -467,7 +472,7 @@ function requireDailyListParseSelection_() {
     }
     return { sheet: sheet, date: date, mode: "nj600" };
   }
-  SpreadsheetApp.getUi().alert("先选中 daily list 的 A1:D1 日期格，或 E2（NJ100/936）。");
+  SpreadsheetApp.getUi().alert("先选中 daily list 的 A1:D1 日期格，或 E2（NJ100）。");
   return null;
 }
 
@@ -511,8 +516,9 @@ function parseDailyCarrierListsFrom1025_(selected) {
   const rates = loadPickupRates1025_(merchants.byCompact);
   const yunli = mode === "nj600" ? yunliTrucks1025_(rates) : [];
   const trucks = parsed.trucks.concat(yunli);
+  const region = mode === "nj100" ? "EWR100" : "EWR600";
   if (!trucks.length) {
-    const sectionLabel = mode === "nj100936"
+    const sectionLabel = mode === "nj100"
       ? "E 列【NJ100提货】/【NJ936提货】"
       : "A-D 列表（Han Express 仅【NJ600提货】）";
     SpreadsheetApp.getUi().alert("daily list 的" + sectionLabel + "里没有识别到车次" +
@@ -520,7 +526,7 @@ function parseDailyCarrierListsFrom1025_(selected) {
     return;
   }
   const built = trucks.map(function (truck) {
-    return buildRecord1025_(truck, merchants.byCompact, rates, selected.date);
+    return buildRecord1025_(truck, merchants.byCompact, rates, selected.date, region);
   });
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Records");
   if (!sheet) {
@@ -532,7 +538,7 @@ function parseDailyCarrierListsFrom1025_(selected) {
   const missingRates = built.filter(function (row) { return row.missingRate; }).length;
   const dateText = Utilities.formatDate(selected.date, getSpreadsheetTz(), "dd/MM/yyyy");
   let message = "已写入 Records 第 " + startRow + " 行起，共 " + built.length + " 车（" + dateText + "）。";
-  if (mode === "nj100936") message += "\n来源：E 列【NJ100提货】/【NJ936提货】。";
+  if (mode === "nj100") message += "\n来源：E 列 NJ100；REGION=" + region + "。";
   else message += "\n来源：A-D（Han Express / Inspire / FM / SD；A 列仅【NJ600提货】）。";
   if (yunli.length) message += "\n其中运力部卡车 " + yunli.length + " 条，没有这车时删掉对应行。";
   message += "\n板数留空。";
@@ -554,7 +560,7 @@ function parseDailyCarrierListsFrom1025_(selected) {
 function originNameChoices1025_() {
   const rate = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Pickup Rate");
   if (!rate || rate.getLastRow() < 2) return [];
-  const names = rate.getRange(2, 6, rate.getLastRow() - 1, 1).getDisplayValues()
+  const names = rate.getRange(2, 7, rate.getLastRow() - 1, 1).getDisplayValues()
     .map(function (row) { return String(row[0] || "").trim(); })
     .filter(function (name) { return name; });
   const extras = ["TT NJ1001", "TTNJ1001", "NJTT1001", "NJ1001"];
@@ -625,7 +631,7 @@ function readDailyListLines1025_(sheet, mode) {
   const height = last - DAILY_PASTE_START_ROW + 1;
   const lines = [];
   // defaultVehicle26: FM (col C) and SD (col D) lists never write truck size.
-  if (mode === "nj100936") {
+  if (mode === "nj100") {
     const values = sheet.getRange(DAILY_PASTE_START_ROW, 5, height, 1).getDisplayValues();
     values.forEach(function (row) {
       const cleaned = stripPastePlaceholder_(row[0]);
@@ -686,8 +692,8 @@ function parseTruckLines1025_(lines) {
   lines.forEach(function (item) {
     const text = typeof item === "string" ? item : (item && item.text);
     const defaultVehicle26 = !!(item && item.defaultVehicle26);
-    const cleaned = String(text || "").replace(/✅/g, "").trim();
-    if (!cleaned || cleaned.indexOf("❌") !== -1) return;
+    const cleaned = normalizeTripLine1025_(text);
+    if (!cleaned) return;
     if (/^\d+\.\s*cargo\s*van\b/i.test(cleaned)) {
       cargoVans++;
       return;
@@ -712,6 +718,28 @@ function parseTruckLines1025_(lines) {
     trucks.push(truck);
   });
   return { trucks: trucks, cargoVans: cargoVans, extraStops: extraStops, skipped: skipped };
+}
+
+// Strip labels before the trip / truck size, e.g.
+// "没货补单12. 26'|...", "关门15. 53'|...", "没给货补单26'|ShipBob PA4755-NJ600".
+function normalizeTripLine1025_(line) {
+  let text = String(line || "").replace(/✅/g, "").trim();
+  if (!text || text.indexOf("❌") !== -1) return "";
+  const sized = text.match(/(?:.*?(\d+)\.\s*)?(26|53)\s*['’‘′]\s*[|｜]\s*(.+)$/i);
+  if (sized) {
+    const n = sized[1] || "0";
+    return n + ". " + sized[2] + "'|" + String(sized[3] || "").trim();
+  }
+  const numbered = text.match(/(\d+\.\s*.+)$/);
+  if (numbered) return numbered[1].trim();
+  return text;
+}
+
+function stripListLabel1025_(name) {
+  return String(name || "")
+    .replace(/^(没给?货补单|没货补单|关门|补单)\s*/u, "")
+    .replace(/^(26|53)\s*['’‘′]\s*[|｜]\s*/, "")
+    .trim();
 }
 
 // JD NJ1570 / Yanwen / SF NJ122 charter is one truck even when the FM list
@@ -753,7 +781,7 @@ function parseTruckLine1025_(line) {
   }
   const stops = [];
   parts.forEach(function (part) {
-    const name = splitStopName1025_(part);
+    const name = stripListLabel1025_(splitStopName1025_(part));
     if (name) stops.push(name);
   });
   if (!stops.length) return null;
@@ -782,7 +810,7 @@ function parseFmCharterLine1025_(line) {
   }
   const stops = [];
   parts.forEach(function (part) {
-    const name = splitStopName1025_(part);
+    const name = stripListLabel1025_(splitStopName1025_(part));
     if (name) stops.push(name);
   });
   if (!stops.length || !stops.every(looksLikeFmCharterStop1025_)) return null;
@@ -813,7 +841,7 @@ function parseLooseTruckLine1025_(line) {
   }
   const stops = [];
   parts.forEach(function (part) {
-    const name = splitStopName1025_(part);
+    const name = stripListLabel1025_(splitStopName1025_(part));
     if (name) stops.push(name);
   });
   if (!stops.length || !dest) return null;
@@ -884,8 +912,9 @@ function loadMerchants1025_() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Pickup Rate");
   const byCompact = {};
   if (!sheet || sheet.getLastRow() < 2) return { byCompact: byCompact };
-  // F name, G address, H 提货时间, I 关门时间(不用), J 提货公司, K Partner ID, L Partner Name
-  const values = sheet.getRange(2, 6, sheet.getLastRow() - 1, 7).getValues();
+  // Merchant block is independent of column A active/inactive (that flags A-E rates).
+  // G name, H address, I 提货时间, J 关门时间(不用), K 提货公司, L Partner ID, M Partner Name
+  const values = sheet.getRange(2, 7, sheet.getLastRow() - 1, 7).getValues();
   values.forEach(function (row) {
     const name = String(row[0] || "").trim();
     if (!name) return;
@@ -906,17 +935,46 @@ function keepsListSpelling1025_(name) {
 }
 
 function lookupMerchant1025_(name, byCompact) {
-  const raw = compactStop_(name);
+  const raw = compactStop_(stripListLabel1025_(name));
   if (!raw) return null;
   if (byCompact[raw]) return byCompact[raw];
   if (raw === "willownj3509" && byCompact.wilownj3509) return byCompact.wilownj3509;
   if ((raw === "ttnj1001" || raw === "njtt1001") && byCompact.nj1001) return byCompact.nj1001;
   if (raw === "sffm" && byCompact.sfnj122) return byCompact.sfnj122;
+  if ((raw === "staci10" || raw === "stacinj10") && byCompact.stacinj10) return byCompact.stacinj10;
   const flipped = flipStateBrand1025_(raw);
   if (flipped && byCompact[flipped]) return byCompact[flipped];
   const capacity = lookupCapacityMerchant1025_(raw, byCompact);
   if (capacity) return capacity;
+  const loose = lookupLooseMerchant1025_(raw, byCompact);
+  if (loose) return loose;
   return null;
+}
+
+// Brand-only or brand+digits without state: YoungVentures -> YoungVentures NJ424,
+// Staci10 -> Staci NJ10, when the match is unique in Pickup Rate.
+function lookupLooseMerchant1025_(raw, byCompact) {
+  const hits = [];
+  const seen = {};
+  const bare = String(raw || "").match(/^([a-z]+)(\d+)$/);
+  Object.keys(byCompact).forEach(function (key) {
+    const merchant = byCompact[key];
+    const name = merchant && merchant.name;
+    if (!name || seen[name]) return;
+    let ok = false;
+    if (bare) {
+      const brand = bare[1];
+      const digits = bare[2];
+      if (new RegExp("^" + brand + "[a-z]{2}" + digits + "$").test(key)) ok = true;
+    } else if (key.indexOf(raw) === 0 && key.length > raw.length) {
+      const rest = key.slice(raw.length);
+      if (/^[a-z]{2}\d+$/.test(rest)) ok = true;
+    }
+    if (!ok) return;
+    seen[name] = true;
+    hits.push(merchant);
+  });
+  return hits.length === 1 ? hits[0] : null;
 }
 
 function lookupCapacityMerchant1025_(raw, byCompact) {
@@ -958,18 +1016,25 @@ function stopKey1025_(name, byCompact) {
   return raw;
 }
 
+function isActiveRateStatus1025_(value) {
+  return normalize(value) === "active";
+}
+
 function loadPickupRates1025_(byCompact) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Pickup Rate");
   if (!sheet || sheet.getLastRow() < 2) return [];
-  const values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 4).getValues();
+  // A 状态(active/inactive), B 路线, C 价格, D 车型, E 卡车供应商
+  // Active only applies to this A-E rate block, not the merchant columns G+.
+  const values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
   const rates = [];
   values.forEach(function (row) {
-    const route = String(row[0] || "").trim();
-    const vehicle = vehicleKey1025_(row[2]);
+    if (!isActiveRateStatus1025_(row[0])) return;
+    const route = String(row[1] || "").trim();
+    const vehicle = vehicleKey1025_(row[3]);
     if (!route || !vehicle) return;
     const special = specialRateKind1025_(route);
     if (special) {
-      const price = parsePrice1025_(row[1]);
+      const price = parsePrice1025_(row[2]);
       if (price === "") return;
       rates.push({
         special: special,
@@ -977,7 +1042,7 @@ function loadPickupRates1025_(byCompact) {
         dest: "ewr",
         vehicle: vehicle,
         price: price,
-        carrier: String(row[3] || "").trim()
+        carrier: String(row[4] || "").trim()
       });
       return;
     }
@@ -988,8 +1053,8 @@ function loadPickupRates1025_(byCompact) {
       names: parsed.names,
       dest: parsed.dest,
       vehicle: vehicle,
-      price: parsePrice1025_(row[1]),
-      carrier: String(row[3] || "").trim()
+      price: parsePrice1025_(row[2]),
+      carrier: String(row[4] || "").trim()
     });
   });
   return rates;
@@ -1119,11 +1184,11 @@ function findPickupRate1025_(truck, byCompact, rates) {
   return null;
 }
 
-function buildRecord1025_(truck, byCompact, rates, date) {
+function buildRecord1025_(truck, byCompact, rates, date, region) {
   const row = [];
   for (let i = 0; i < RECORD_COLS_1025_; i++) row.push("");
   row[0] = Utilities.formatDate(date, getSpreadsheetTz(), "dd/MM/yyyy");
-  row[1] = "EWR600";
+  row[1] = region || "EWR600";
   row[2] = "Scheduled";
   row[3] = truck.vehicleType || "";
   row[6] = truck.stops.length;
