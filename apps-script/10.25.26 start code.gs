@@ -15,24 +15,26 @@
  * A line containing ❌ is cancelled and skipped.
  * JFK, JFK175, EWR, EWR600, EWR936, NJ600, NJ936 at the end are the receiving
  * warehouse, not a pickup. Pickups are split on "-" outside parentheses.
- * Origin Name 1/2/3 are columns M/S/Y. A name found in Pickup Rate column F
+ * Origin Name 1/2/3 are columns M/S/Y. A name found in Pickup Rate column H
  * is written with that spelling, except TTNJ1001 and NJ1001, which stay
  * exactly as written on the list while still mapping to Pickup Rate NJ1001.
  * Partner ID and Partner Name come from
- * columns K and L, and the address comes from column G. Those partner cells
+ * columns M and N, and the address comes from column I. Those partner cells
  * are copied only when they are filled. A name Pickup Rate does not have is
  * still written, and that Origin Name cell is highlighted.
- * Pickup Window for each stop comes from Pickup Rate column H. The first
+ * Pickup Window for each stop comes from Pickup Rate column J. The first
  * stop is Records column L. Origin pallet counts are typed in columns O, U,
  * and AA. Confirm pallet count: select the first Trip_Pallet_Count cell of
  * the block (e.g. H23), or drag H23:H67; it only confirms that row range,
  * fills mapping for added origins, and updates the trip rate.
- * Origin Name 1/2/3 use a dropdown from Pickup Rate column F.
- * RATE and Carrier come from Pickup Rate columns B-E (route/price/vehicle/
- * carrier) only when column A is active. Merchant mapping uses columns G+
- * independently and is not filtered by A. NJ600, EWR600, NJ100, and NJ936
- * temporarily match EWR rates. JFK175 matches JFK. No matching price is
- * left blank and highlighted.
+ * Origin Name 1/2/3 use a dropdown from Pickup Rate column H.
+ * RATE and Carrier come from Pickup Rate columns C-F (route/price/vehicle/
+ * carrier) only when the parse/confirm DATE falls in A 生效日期–B 结束日期
+ * (inclusive; blank end = open). 运力部卡车 auto-append uses the same date
+ * window — expired or not-yet-effective rows are not written. Merchant
+ * mapping uses columns H+ and is not filtered by dates. NJ600, EWR600,
+ * NJ100, and NJ936 temporarily match EWR rates. JFK175 matches JFK. No
+ * matching price is left blank and highlighted.
  * Capacity-EWR is not grouped by 5 stops. Each Capacity truck on the list is
  * one full truck at that row's price. JD NJ1570 / Yanwen / SF NJ122 is a flat
  * charter: one truck at that row's price even when the FM list splits them
@@ -164,14 +166,15 @@ function confirmPalletCount() {
   const start = block.start;
   const end = block.end;
   const merchants = loadMerchants1025_();
-  const rates = loadPickupRates1025_(merchants.byCompact);
+  const allRates = loadPickupRates1025_(merchants.byCompact);
   const height = end - start + 1;
   const range = sheet.getRange(start, 1, height, RECORD_COLS_1025_);
   const values = range.getValues();
   let lastDate = "";
   let lastRegion = "";
   if (start > RECORD_FIRST_ROW_1025_) {
-    lastDate = String(sheet.getRange(start - 1, 1).getDisplayValue() || "").trim();
+    lastDate = sheet.getRange(start - 1, 1).getValue();
+    if (!lastDate) lastDate = String(sheet.getRange(start - 1, 1).getDisplayValue() || "").trim();
     lastRegion = String(sheet.getRange(start - 1, 2).getDisplayValue() || "").trim();
   }
   let confirmed = 0;
@@ -195,6 +198,7 @@ function confirmPalletCount() {
       if (!row[1]) row[1] = lastRegion || "EWR600";
       if (!row[2]) row[2] = "Scheduled";
     }
+    const rates = filterRatesByDate1025_(allRates, row[0] || lastDate);
     ORIGIN_SLOTS_1025_.forEach(function (slot, index) {
       if (!names[index]) {
         row[slot.partnerId - 1] = "";
@@ -229,7 +233,7 @@ function confirmPalletCount() {
       }
     }
     if (stops.length) {
-      const matched = confirmRate1025_(stops, row[3], merchants.byCompact, rates);
+      const matched = confirmRate1025_(stops, row[3], merchants.byCompact, rates, row[0] || lastDate);
       if (matched && matched.rate && matched.rate.price !== "") {
         row[4] = matched.rate.price;
         row[5] = matched.rate.carrier;
@@ -360,27 +364,33 @@ function palletNumber1025_(value) {
   return raw && raw.kind === "number" ? raw.number : null;
 }
 
-function confirmRate1025_(stops, vehicleType, byCompact, rates) {
+function sameStopKeys1025_(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  const left = a.slice().sort();
+  const right = b.slice().sort();
+  for (let i = 0; i < left.length; i++) {
+    if (left[i] !== right[i]) return false;
+  }
+  return true;
+}
+
+function confirmRate1025_(stops, vehicleType, byCompact, rates, asOf) {
   const vehicleKey = vehicleKey1025_(vehicleType);
   const keys = stops.map(function (name) { return stopKey1025_(name, byCompact); });
   const hits = rates.filter(function (rate) {
     if (rate.special || !rate.keys) return false;
     if (vehicleKey && rate.vehicle !== vehicleKey) return false;
-    if (rate.keys.length !== keys.length) return false;
-    for (let i = 0; i < keys.length; i++) {
-      if (rate.keys[i] !== keys[i]) return false;
-    }
-    return true;
+    return sameStopKeys1025_(rate.keys, keys);
   });
-  const picked = pickConfirmRate1025_(hits, vehicleKey);
+  const picked = pickConfirmRate1025_(hits, vehicleKey, asOf);
   if (picked) return picked;
   if (vehicleKey && vehicleKey !== "26") return null;
-  const special = findPickupRate1025_({ stops: stops, vehicleKey: "26", dest: "ewr" }, byCompact, rates);
+  const special = findPickupRate1025_({ stops: stops, vehicleKey: "26", dest: "ewr" }, byCompact, rates, asOf);
   if (!special || !special.special) return null;
   return { rate: special, vehicleType: vehicleType || "26FT" };
 }
 
-function pickConfirmRate1025_(hits, vehicleKey) {
+function pickConfirmRate1025_(hits, vehicleKey, asOf) {
   if (!hits.length) return null;
   const ewr = hits.filter(function (rate) { return rate.dest === "ewr"; });
   const pool = ewr.length ? ewr : hits;
@@ -390,7 +400,10 @@ function pickConfirmRate1025_(hits, vehicleKey) {
   });
   if (!vehicleKey && vehicles.length !== 1) return null;
   const chosen = vehicleKey || vehicles[0];
-  const finalHits = pool.filter(function (rate) { return rate.vehicle === chosen; });
+  const finalHits = resolveRateHitsByDate1025_(
+    pool.filter(function (rate) { return rate.vehicle === chosen; }),
+    asOf
+  );
   if (finalHits.length !== 1) return null;
   return { rate: finalHits[0], vehicleType: chosen + "FT" };
 }
@@ -513,8 +526,16 @@ function parseDailyCarrierListsFrom1025_(selected) {
   const lines = readDailyListLines1025_(selected.sheet, mode);
   const parsed = parseTruckLines1025_(lines);
   const merchants = loadMerchants1025_();
-  const rates = loadPickupRates1025_(merchants.byCompact);
-  const yunli = mode === "nj600" ? yunliTrucks1025_(rates) : [];
+  const asOfKey = toDayKey1025_(selected.date);
+  if (!asOfKey) {
+    SpreadsheetApp.getUi().alert("选中的解析日期无效，Records 没有改动。");
+    return;
+  }
+  const rates = filterRatesByDate1025_(loadPickupRates1025_(merchants.byCompact), selected.date);
+  // 运力部卡车也只追加当天仍有效的费率行；列表里已有的同路线同车型不再重复追加。
+  const yunli = mode === "nj600"
+    ? yunliTrucks1025_(rates, selected.date, parsed.trucks, merchants.byCompact)
+    : [];
   const trucks = parsed.trucks.concat(yunli);
   const region = mode === "nj100" ? "EWR100" : "EWR600";
   if (!trucks.length) {
@@ -560,7 +581,7 @@ function parseDailyCarrierListsFrom1025_(selected) {
 function originNameChoices1025_() {
   const rate = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Pickup Rate");
   if (!rate || rate.getLastRow() < 2) return [];
-  const names = rate.getRange(2, 7, rate.getLastRow() - 1, 1).getDisplayValues()
+  const names = rate.getRange(2, 8, rate.getLastRow() - 1, 1).getDisplayValues()
     .map(function (row) { return String(row[0] || "").trim(); })
     .filter(function (name) { return name; });
   const extras = ["TT NJ1001", "TTNJ1001", "NJTT1001", "NJ1001"];
@@ -737,7 +758,7 @@ function normalizeTripLine1025_(line) {
 
 function stripListLabel1025_(name) {
   return String(name || "")
-    .replace(/^(没给?货补单|没货补单|关门|补单)\s*/u, "")
+    .replace(/^(没给?货补单|没货补单|没货|关门|补单)\s*/u, "")
     .replace(/^(26|53)\s*['’‘′]\s*[|｜]\s*/, "")
     .trim();
 }
@@ -912,9 +933,9 @@ function loadMerchants1025_() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Pickup Rate");
   const byCompact = {};
   if (!sheet || sheet.getLastRow() < 2) return { byCompact: byCompact };
-  // Merchant block is independent of column A active/inactive (that flags A-E rates).
-  // G name, H address, I 提货时间, J 关门时间(不用), K 提货公司, L Partner ID, M Partner Name
-  const values = sheet.getRange(2, 7, sheet.getLastRow() - 1, 7).getValues();
+  // Merchant block is independent of A/B rate dates.
+  // H name, I address, J 提货时间, K 关门时间(不用), L 提货公司, M Partner ID, N Partner Name
+  const values = sheet.getRange(2, 8, sheet.getLastRow() - 1, 7).getValues();
   values.forEach(function (row) {
     const name = String(row[0] || "").trim();
     if (!name) return;
@@ -1016,25 +1037,102 @@ function stopKey1025_(name, byCompact) {
   return raw;
 }
 
-function isActiveRateStatus1025_(value) {
-  return normalize(value) === "active";
+function toDayKey1025_(value) {
+  if (value === "" || value === null || value === undefined) return "";
+  if (Object.prototype.toString.call(value) === "[object Date]" && !isNaN(value.getTime())) {
+    return Utilities.formatDate(value, getSpreadsheetTz(), "yyyy-MM-dd");
+  }
+  const text = String(value).trim();
+  if (!text) return "";
+  let year = 0;
+  let month = 0;
+  let day = 0;
+  let matched = text.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+  if (matched) {
+    year = Number(matched[1]);
+    month = Number(matched[2]);
+    day = Number(matched[3]);
+  } else {
+    matched = text.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+    if (!matched) return "";
+    day = Number(matched[1]);
+    month = Number(matched[2]);
+    year = Number(matched[3]);
+    if (month > 12 && day <= 12) {
+      const swap = day;
+      day = month;
+      month = swap;
+    }
+  }
+  if (!year || !month || !day) return "";
+  const mm = month < 10 ? "0" + month : String(month);
+  const dd = day < 10 ? "0" + day : String(day);
+  return year + "-" + mm + "-" + dd;
+}
+
+function toDay1025_(value) {
+  const key = toDayKey1025_(value);
+  if (!key) return null;
+  const parts = key.split("-");
+  return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])).getTime();
+}
+
+function isRateEffectiveOn1025_(start, end, asOf) {
+  const day = toDayKey1025_(asOf);
+  if (!day) return false;
+  const startDay = toDayKey1025_(start);
+  const endDay = toDayKey1025_(end);
+  if (startDay && startDay > day) return false;
+  if (endDay && endDay < day) return false;
+  return true;
+}
+
+function filterRatesByDate1025_(rates, asOf) {
+  if (!toDayKey1025_(asOf)) return [];
+  return (rates || []).filter(function (rate) {
+    return isRateEffectiveOn1025_(rate.effective, rate.end, asOf);
+  });
+}
+
+// If several routes share stops+vehicle, keep only rows effective on asOf;
+// if still tied, keep the latest 生效日期.
+function resolveRateHitsByDate1025_(hits, asOf) {
+  if (!hits || !hits.length) return [];
+  if (hits.length === 1) return hits;
+  let pool = hits;
+  if (toDayKey1025_(asOf)) {
+    const dated = hits.filter(function (rate) {
+      return isRateEffectiveOn1025_(rate.effective, rate.end, asOf);
+    });
+    if (dated.length) pool = dated;
+  }
+  if (pool.length <= 1) return pool;
+  pool = pool.slice().sort(function (a, b) {
+    return toDayKey1025_(b.effective).localeCompare(toDayKey1025_(a.effective));
+  });
+  const best = toDayKey1025_(pool[0].effective);
+  return pool.filter(function (rate) { return toDayKey1025_(rate.effective) === best; });
 }
 
 function loadPickupRates1025_(byCompact) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Pickup Rate");
   if (!sheet || sheet.getLastRow() < 2) return [];
-  // A 状态(active/inactive), B 路线, C 价格, D 车型, E 卡车供应商
-  // Active only applies to this A-E rate block, not the merchant columns G+.
-  const values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
+  // A 生效日期, B 结束日期, C 路线, D 价格, E 车型, F 卡车供应商
+  // Date window only applies to this A-F rate block, not merchant columns H+.
+  // Use A1 + display text for dates so 生效/结束 match what you see in the sheet.
+  const last = sheet.getLastRow();
+  const values = sheet.getRange("A2:F" + last).getValues();
+  const dateText = sheet.getRange("A2:B" + last).getDisplayValues();
   const rates = [];
-  values.forEach(function (row) {
-    if (!isActiveRateStatus1025_(row[0])) return;
-    const route = String(row[1] || "").trim();
-    const vehicle = vehicleKey1025_(row[3]);
+  values.forEach(function (row, index) {
+    const route = String(row[2] || "").trim();
+    const vehicle = vehicleKey1025_(row[4]);
     if (!route || !vehicle) return;
+    const effective = toDayKey1025_(dateText[index][0] || row[0]);
+    const end = toDayKey1025_(dateText[index][1] || row[1]);
     const special = specialRateKind1025_(route);
     if (special) {
-      const price = parsePrice1025_(row[2]);
+      const price = parsePrice1025_(row[3]);
       if (price === "") return;
       rates.push({
         special: special,
@@ -1042,7 +1140,9 @@ function loadPickupRates1025_(byCompact) {
         dest: "ewr",
         vehicle: vehicle,
         price: price,
-        carrier: String(row[4] || "").trim()
+        carrier: String(row[5] || "").trim(),
+        effective: effective,
+        end: end
       });
       return;
     }
@@ -1053,8 +1153,10 @@ function loadPickupRates1025_(byCompact) {
       names: parsed.names,
       dest: parsed.dest,
       vehicle: vehicle,
-      price: parsePrice1025_(row[2]),
-      carrier: String(row[4] || "").trim()
+      price: parsePrice1025_(row[3]),
+      carrier: String(row[5] || "").trim(),
+      effective: effective,
+      end: end
     });
   });
   return rates;
@@ -1092,12 +1194,25 @@ function parseRateRoute1025_(route, byCompact) {
   return { keys: keys, names: names, dest: dest };
 }
 
-function yunliTrucks1025_(rates) {
+function yunliTrucks1025_(rates, asOf, existingTrucks, byCompact) {
   const trucks = [];
+  if (!toDayKey1025_(asOf)) return trucks;
+  const existing = (existingTrucks || []).map(function (truck) {
+    const keys = (truck.stops || []).map(function (name) {
+      return stopKey1025_(name, byCompact || {});
+    }).slice().sort();
+    return { vehicle: truck.vehicleKey || "", keys: keys.join("|") };
+  });
   rates.forEach(function (rate) {
     if (String(rate.carrier || "").replace(/\s/g, "") !== "运力部卡车") return;
+    if (!isRateEffectiveOn1025_(rate.effective, rate.end, asOf)) return;
     if (!rate.names || !rate.names.length || !rate.dest) return;
     if (rate.vehicle !== "26" && rate.vehicle !== "53") return;
+    const key = (rate.keys || []).slice().sort().join("|");
+    const duplicate = existing.some(function (item) {
+      return item.vehicle === rate.vehicle && item.keys === key;
+    });
+    if (duplicate) return;
     trucks.push({
       vehicleKey: rate.vehicle,
       vehicleType: rate.vehicle + "FT",
@@ -1154,23 +1269,20 @@ function specialPickupRate1025_(rates, kind) {
   return hits.length === 1 ? hits[0] : null;
 }
 
-function findPickupRate1025_(truck, byCompact, rates) {
+function findPickupRate1025_(truck, byCompact, rates, asOf) {
   const keys = truck.stops.map(function (name) { return stopKey1025_(name, byCompact); });
   const vehicleKey = truck.vehicleKey;
   let hits = rates.filter(function (rate) {
     if (rate.special) return false;
     if (vehicleKey && rate.vehicle !== vehicleKey) return false;
     if (rate.dest !== truck.dest) return false;
-    if (rate.keys.length !== keys.length) return false;
-    for (let i = 0; i < keys.length; i++) {
-      if (rate.keys[i] !== keys[i]) return false;
-    }
-    return true;
+    return sameStopKeys1025_(rate.keys, keys);
   });
   if (!vehicleKey && hits.length > 1) {
     const only26 = hits.filter(function (rate) { return rate.vehicle === "26"; });
     hits = only26.length ? only26 : hits;
   }
+  hits = resolveRateHitsByDate1025_(hits, asOf);
   if (hits.length === 1) return hits[0];
   if (vehicleKey && vehicleKey !== "26") return null;
   if (!vehicleKey) return null;
@@ -1192,7 +1304,7 @@ function buildRecord1025_(truck, byCompact, rates, date, region) {
   row[2] = "Scheduled";
   row[3] = truck.vehicleType || "";
   row[6] = truck.stops.length;
-  const rate = findPickupRate1025_(truck, byCompact, rates);
+  const rate = findPickupRate1025_(truck, byCompact, rates, date);
   if (rate && rate.price !== "") {
     row[4] = rate.price;
     row[5] = rate.carrier;
